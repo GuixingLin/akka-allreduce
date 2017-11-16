@@ -1,5 +1,0 @@
-[0m[[0mdebug[0m] [0mCopy resource mappings: [0m
-[0m[[0mdebug[0m] [0m	(/Users/lincolnglin/Documents/akka-allreduce/src/main/resources/factorial.conf,/Users/lincolnglin/Documents/akka-allreduce/target/scala-2.12/classes/factorial.conf)[0m
-[0m[[0mdebug[0m] [0m	(/Users/lincolnglin/Documents/akka-allreduce/src/main/resources/stats2.conf,/Users/lincolnglin/Documents/akka-allreduce/target/scala-2.12/classes/stats2.conf)[0m
-[0m[[0mdebug[0m] [0m	(/Users/lincolnglin/Documents/akka-allreduce/src/main/resources/application.conf,/Users/lincolnglin/Documents/akka-allreduce/target/scala-2.12/classes/application.conf)[0m
-[0m[[0mdebug[0m] [0m	(/Users/lincolnglin/Documents/akka-allreduce/src/main/resources/stats1.conf,/Users/lincolnglin/Documents/akka-allreduce/target/scala-2.12/classes/stats1.conf)[0m

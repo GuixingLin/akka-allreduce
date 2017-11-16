@@ -11,88 +11,103 @@ import scala.language.postfixOps
 
 class AllreduceWorker extends Actor {
 
-  var myId = -1
-  var myGroup: collection.mutable.Map[Int,ActorRef] = collection.mutable.Map[Int, ActorRef]()
-  var groupSize = -1
-  var numScattered = 0
-  var numGathered = 0
-  var scatteredData : Array[Double] = Array.empty
-  var scatteredDataRecv : Array[Double] = Array.empty
-  var gatheredData : Array[Double] = Array.empty
-  var aggregatedData : Double = 0
+  var id = -1 // node id
+  var master : Option[ActorRef] = None
+  var peers = Map[Int, ActorRef]()  // workers in the same row/col, including self
+  var thReduce = 1.0    // pct of scattered data needed to start reducing 
+  var thComplete = 1.0  // pct of reduced data needed to complete current round
+  var maxLag = 0    // number of rounds allowed for a worker to fall behind
+  var data : Array[Double] = Array.empty  // input buffer
+  var scatterBuf : Array[Double] = Array.empty  // buffer to store scattered data received
+  var reduceBuf : Array[Double] = Array.empty   // buffer to store reduced data received
+  var aggregatedData  : Double = 0  // obtained by aggregating scatterBuf
+  var round = -1 // current round of allreduce
 
   def receive = {
 
-    case nb : Neighbors=>
-      myGroup = nb.workers
-      myId = nb.destId
-      groupSize = myGroup.size
-      scatteredDataRecv = Array[Double](groupSize)
-      gatheredData = Array[Double](groupSize)
-      println(s"----myId = ${myId}")
+    case init : InitWorkers =>
+      peers = init.workers
+      master = Some(init.master)
+      id = init.destId
+      thReduce = init.thReduce
+      thComplete = init.thComplete
+      maxLag = init.maxLag
+      round = -1 // clear round info to start over
+      println(s"----id = ${id}")
+      for (i <- 0 until peers.size) {
+        println(s"----peers[${i}] = ${peers(i)}")
+      }
+      println(s"----number of peers = ${peers.size}")
 
     case start : StartAllreduce =>
-      initScatteredData()
-      println(s"scattered data = ${scatteredData(0)} ${scatteredData(1)}")
-      scatter()
+      println(s"----start allreduce round ${start.round}")
+      if (start.round > round) {
+        round = start.round
+        initData(round)
+        scatter()
+      }
 
-    case scattered : Scatter =>
-      assert(scattered.destId == myId)
-      println(s"receive scattered data = $scattered.value")
-      storeScatteredData(scattered.value, scattered.srcId) //? necessary?
-
-      if (numScattered == groupSize) {
+    case s : Scatter =>
+      println(s"----receive scattered data from round ${s.round}: value = ${s.value}, srcId = ${s.srcId}, destId = ${s.destId}")
+      assert(s.destId == id || id == -1)
+      storeScatteredData(s.value, s.srcId) //? necessary?
+      if (scatterBuf.length >= peers.size * thReduce && id != -1) {
+        println(s"----receive ${scatterBuf.length} scattered data (numPeers = ${peers.size}) for round ${round}, start reducing")
         aggregatedData = aggregate()
         broadcast(aggregatedData)
       }
 
-    case gathered : Gather =>
-      assert(gathered.destId == myId)
-      storeGatheredData(gathered.value, gathered.srcId)
-      if (numGathered == groupSize) {
+    case r : Reduce =>
+      println(s"----receive reduced data from round ${r.round}: value = ${r.value}, srcId = ${r.srcId}, destId = ${r.destId}")
+      assert(r.destId == id || id == -1)
+      storeReducedData(r.value, r.srcId)
+      if (reduceBuf.length >= peers.size * thComplete && id != -1) {
+        println(s"----receive ${reduceBuf.length} reduced data (numPeers = ${peers.size}) for round ${round}, complete")
         update()
-        complete()
+        complete(round)
       }
 
     case Terminated(a) =>
-      for ((idx, worker) <- myGroup) {
+      for ((idx, worker) <- peers) {
         if(worker == a) {
-          myGroup -= idx
+          peers -= idx
         }
       }
   }
 
-  private def initScatteredData() = {
-    println(s"scatteredData.length = ${scatteredData.length}")
-    for (i <- 0 until scatteredData.length) {
-      scatteredData :+= i.toDouble
-      println(s"scatteredData[$i] = ${scatteredData(i)}")
+  private def initData(round : Int) = {
+    for (i <- 0 until peers.size) {
+      data :+= i.toDouble + round
+      println(s"----data[$i] = ${data(i)}")
     }
   }
 
   private def scatter() = {
-    for ((idx, worker) <- myGroup) {
-      worker ! Scatter(scatteredData(idx), myId, idx)
+    for ((idx, worker) <- peers) {
+      println(s"----send msg ${data(idx)} from ${id} to ${idx}")
+      worker ! Scatter(data(idx), id, idx, round)
     }
   }
 
   private def broadcast(data : Double) = {
-    for ((idx, worker) <- myGroup) {
-      worker ! Gather(data, myId, idx)
+    println(s"----start broadcasting")
+    for ((idx, worker) <- peers) {
+      worker ! Reduce(data, id, idx, round)
     }
   }
 
   private def storeScatteredData(data : Double, srcId : Int) = {
-    scatteredDataRecv(srcId) = data
+    scatterBuf :+= data
   }
 
-  private def storeGatheredData(data: Double, srcId : Int) = {
-    gatheredData(srcId) = data
+  private def storeReducedData(data: Double, srcId : Int) = {
+    reduceBuf :+= data
   }
 
   private def aggregate() : Double = {
+    println(s"----start aggregating")
     aggregatedData = 0
-    for (v <- scatteredDataRecv) {
+    for (v <- scatterBuf) {
       aggregatedData += v
     }
     return aggregatedData
@@ -102,10 +117,13 @@ class AllreduceWorker extends Actor {
     println("----in update")
   }
 
-  private def complete() = {
-    println("----in complete")
+  private def complete(round : Int) = {
+    println(s"----complete allreduce round ${round}\n")
+    scatterBuf = Array.empty
+    reduceBuf = Array.empty 
+    data = Array.empty
+    master.orNull ! CompleteAllreduce(id, round)
   }
-
 }
 
 object AllreduceWorker {
