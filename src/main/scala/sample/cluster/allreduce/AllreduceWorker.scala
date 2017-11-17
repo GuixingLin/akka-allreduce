@@ -60,6 +60,7 @@ class AllreduceWorker extends Actor {
       println(s"----start allreduce round ${s.round}")
       if (id == -1) {
         println(s"----I am not initialized yet!!!")
+        self ! s
       } else {
         maxRound = math.max(maxRound, s.round)
         while (round < maxRound - maxLag) { // fall behind too much, catch up
@@ -79,6 +80,7 @@ class AllreduceWorker extends Actor {
       println(s"----receive scattered data from round ${s.round}: value = ${s.value}, srcId = ${s.srcId}, destId = ${s.destId}")
       if (id == -1) {
         println(s"----I am not initialized yet!!!")
+        self ! s
       } else {
         assert(s.destId == id)
         if (s.round < round || completed.contains(s.round)) {
@@ -101,6 +103,7 @@ class AllreduceWorker extends Actor {
       println(s"----receive reduced data from round ${r.round}: value = ${r.value}, srcId = ${r.srcId}, destId = ${r.destId}")
       if (id == -1) {
         println(s"----I am not initialized yet!!!")
+        self ! r
       } else {
         assert(r.destId == id)
         if (r.round < round || completed.contains(r.round)) {
