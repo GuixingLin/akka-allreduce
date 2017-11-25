@@ -88,7 +88,7 @@ class AllreduceWorker extends Actor {
         } else if (s.round <= maxRound) {
           val row = s.round - round
           storeScatteredData(s.value, s.srcId, row)
-          if (scatterBuf(row)(peers.size) >= peers.size * thReduce) {
+          if (scatterBuf(row)(peers.size) == peers.size * thReduce) {
             println(s"----receive ${scatterBuf(row)(peers.size)} scattered data (numPeers = ${peers.size}) for round ${s.round}, start reducing")
             reducedData = reduce(row)
             broadcast(reducedData, s.round)
@@ -111,7 +111,7 @@ class AllreduceWorker extends Actor {
         } else if (r.round <= maxRound) {
           val row = r.round - round
           storeReducedData(r.value, r.srcId, row)
-          if (reduceBuf(row)(peers.size) >= peers.size * thComplete) {
+          if (reduceBuf(row)(peers.size) == peers.size * thComplete) {
             println(s"----receive ${reduceBuf(row)(peers.size)} reduced data (numPeers = ${peers.size}) for round ${r.round}, complete")
             update(row)
             complete(r.round)
@@ -129,9 +129,11 @@ class AllreduceWorker extends Actor {
           peers -= idx
         }
       }
-  }
+  } 
 
   private def fetch(round : Int) = {
+    println(s"fetch ${round}")
+    data = Array.empty
     for (i <- 0 until peers.size) {
       data :+= i.toDouble + round
       println(s"----data[$i] = ${data(i)}")
