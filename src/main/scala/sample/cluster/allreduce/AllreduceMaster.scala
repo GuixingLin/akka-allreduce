@@ -18,6 +18,7 @@ class AllreduceMaster(
   thReduce : Double, 
   thComplete : Double,
   maxLag : Int,
+  dataSize: Int
 ) extends Actor {
 
   var workers = Map[Int, ActorRef]()
@@ -57,27 +58,13 @@ class AllreduceMaster(
       println(s"----node ${c.srcId} completes allreduce round ${c.round}")
       if (c.round == round) {
         numComplete += 1
-        if (numComplete >= totalWorkers * thAllreduce && round < 5) {
+        if (numComplete >= totalWorkers * thAllreduce && round < 1000) {
           println(s"----${numComplete} (out of ${totalWorkers}) workers complete round ${round}\n")
           round += 1
           startAllreduce()
         }
       }
   }
-
-  // def setupLayout(): Unit =
-  // // Organize grid
-  // for((idx, worker) <- workers){
-  //   val groups = layout.groups(idx)
-  //   for (group <- groups){
-  //     val member_idxs = layout.members(group)
-  //     var members = Set[ActorRef]()
-  //     for(member_id <- member_idxs) members+=workers(member_id)
-  //     val addresses = GridGroupAddresses(group, members)
-  //     println(s"To worker $idx $worker: Sending group address: $addresses")
-  //     worker ! addresses
-  //   }
-  // }
 
   private def register(member: Member): Future[Done] =
     if (member.hasRole("worker")) {
@@ -96,7 +83,7 @@ class AllreduceMaster(
     private def init_workers() = {
       for ((idx, worker) <- workers) {
         println(s"----init worker $idx $worker")
-        worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag)
+        worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize=workers.size)
       }
     }
 
