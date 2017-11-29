@@ -1,9 +1,10 @@
 import akka.actor.{ActorRef, ActorSystem, Props}
-import akka.testkit.{ImplicitSender, TestActors, TestKit}
+import akka.testkit.{ImplicitSender, TestKit}
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 import sample.cluster.allreduce._
 
 import scala.collection.immutable.HashMap
+import scala.util.Random
 
 class AllreduceSpec() extends TestKit(ActorSystem("MySpec")) with ImplicitSender
   with WordSpecLike with Matchers with BeforeAndAfterAll {
@@ -13,8 +14,8 @@ class AllreduceSpec() extends TestKit(ActorSystem("MySpec")) with ImplicitSender
 
   "Allreduce worker" must {
     "single-round allreduce" in {
-      val worker = system.actorOf(Props[AllreduceWorker], name = "worker")
-      val workers: Map[Int, ActorRef] = HashMap(0 -> self, 1 -> self, 2 -> self, 3 -> self)
+      val worker = createNewWorker("worker")
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf
       val idx = 0
       val thReduce = 1
       val thComplete = 0.75
@@ -41,8 +42,8 @@ class AllreduceSpec() extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       expectMsg(CompleteAllreduce(0, 0))
     }
     "multi-round allreduce" in {
-      val worker = system.actorOf(Props[AllreduceWorker], name = "worker2")
-      val workers: Map[Int, ActorRef] = HashMap(0 -> self, 1 -> self, 2 -> self, 3 -> self)
+      val worker = createNewWorker("worker2")
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf
       val idx = 0
       val thReduce = 1
       val thComplete = 0.75
@@ -71,8 +72,8 @@ class AllreduceSpec() extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       }
     }
     "missed scatter" in {
-      val worker = system.actorOf(Props[AllreduceWorker], name = "worker3")
-      val workers: Map[Int, ActorRef] = HashMap(0 -> self, 1 -> self, 2 -> self, 3 -> self)
+      val worker = createNewWorker("worker3")
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf
       val idx = 0
       val thReduce = 0.75
       val thComplete = 0.75
@@ -101,8 +102,8 @@ class AllreduceSpec() extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       expectMsg(CompleteAllreduce(0, 0))
     }
     "missed reduce" in {
-      val worker = system.actorOf(Props[AllreduceWorker], name = "worker4")
-      val workers: Map[Int, ActorRef] = HashMap(0 -> self, 1 -> self, 2 -> self, 3 -> self)
+      val worker = createNewWorker("worker4")
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf
       val idx = 0
       val thReduce = 1
       val thComplete = 0.75
@@ -131,8 +132,8 @@ class AllreduceSpec() extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       expectMsg(CompleteAllreduce(0, 0))
     }
     "future scatter" in {
-      val worker = system.actorOf(Props[AllreduceWorker], name = "worker5")
-      val workers: Map[Int, ActorRef] = HashMap(0 -> self, 1 -> self, 2 -> self, 3 -> self)
+      val worker = createNewWorker("worker5")
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf
       val idx = 0
       val thReduce = 0.75
       val thComplete = 0.75
@@ -181,8 +182,8 @@ class AllreduceSpec() extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       expectMsg(CompleteAllreduce(0, 1))
     }
     "delayed future reduce" in {
-      val worker = system.actorOf(Props[AllreduceWorker], name = "worker6")
-      val workers: Map[Int, ActorRef] = HashMap(0 -> self, 1 -> self, 2 -> self, 3 -> self)
+      val worker = createNewWorker("worker6")
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf
       val idx = 0
       val thReduce = 0.75
       val thComplete = 0.75
@@ -227,8 +228,8 @@ class AllreduceSpec() extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       expectMsg(CompleteAllreduce(0, 1))
     }
     "simple catchup" in {
-      val worker = system.actorOf(Props[AllreduceWorker], name = "worker7")
-      val workers: Map[Int, ActorRef] = HashMap(0 -> self, 1 -> self, 2 -> self, 3 -> self)
+      val worker = createNewWorker("worker7")
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf
       val idx = 0
       val thReduce = 1
       val thComplete = 1
@@ -270,9 +271,10 @@ class AllreduceSpec() extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       expectMsg(Scatter(3 + 7, 0, 3, 7))
     }
     "cold catchup" in {
+      val workerName = "worker8"
       // extreme case of catch up, only for test use
-      val worker = system.actorOf(Props[AllreduceWorker], name = "worker8")
-      val workers: Map[Int, ActorRef] = HashMap(0 -> self, 1 -> self, 2 -> self, 3 -> self)
+      val worker = createNewWorker(workerName)
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf
       val idx = 0
       val thReduce = 1
       val thComplete = 1
@@ -294,7 +296,33 @@ class AllreduceSpec() extends TestKit(ActorSystem("MySpec")) with ImplicitSender
         expectMsg(Scatter(2 + i, 0, 2, i))
         expectMsg(Scatter(3 + i, 0, 3, i))
       }
+    }
+
+    "buffer when unitialized" in {
+
+      val worker = createNewWorker("")
+      worker ! StartAllreduce(0)
+      expectNoMsg()
+      val idx = 0
+      val thReduce = 1
+      val thComplete = 1
+      val maxLag = 5
+      worker ! InitWorkers(initializeWorkersAsSelf, self, idx, thReduce, thComplete, maxLag)
+      expectMsg(Scatter(0.0, 0, 0, 0))
+      expectMsg(Scatter(1.0, 0, 1, 0))
+      expectMsg(Scatter(2.0, 0, 2, 0))
+      expectMsg(Scatter(3.0, 0, 3, 0))
 
     }
+
+  }
+
+  private def createNewWorker(workerName: String) = {
+    system.actorOf(Props[AllreduceWorker], name = Random.alphanumeric.take(10).mkString)
+  }
+
+  private def initializeWorkersAsSelf = {
+    val workers: Map[Int, ActorRef] = HashMap(0 -> self, 1 -> self, 2 -> self, 3 -> self)
+    workers
   }
 }
