@@ -220,7 +220,7 @@ class AllreduceWorker extends Actor {
     println(s"----complete allreduce round ${completedRound}\n")
     data = Array.empty
     master.orNull ! CompleteAllreduce(id, completedRound)
-    completed+(completedRound)
+    completed = completed + completedRound
     if (round == completedRound) {
       do {
         round += 1

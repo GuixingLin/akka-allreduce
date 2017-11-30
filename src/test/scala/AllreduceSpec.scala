@@ -11,6 +11,48 @@ class AllreduceSpec() extends TestKit(ActorSystem("MySpec")) with ImplicitSender
     TestKit.shutdownActorSystem(system)
   }
 
+  // basic setup
+  val idx = 0
+  val thReduce = 1
+  val thComplete = 0.75
+  val maxLag = 5
+  val dataSize = 8
+
+  "Early receiving reduce" must {
+
+    val worker = createNewWorker()
+    val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
+    val futureRound = 3
+
+    "send complete to master" in {
+
+      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize)
+      worker ! StartAllreduce(0)
+
+      worker ! ReduceBlock(Array(12, 15), 0, 0, futureRound)
+      worker ! ReduceBlock(Array(11, 10), 1, 0, futureRound)
+      worker ! ReduceBlock(Array(10, 20), 2, 0, futureRound)
+      worker ! ReduceBlock(Array(9, 10), 3, 0, futureRound)
+
+      fishForMessage() {
+        case c: CompleteAllreduce => {
+          c.round shouldBe futureRound
+          c.srcId shouldBe 0
+          true
+        }
+        case _: ScatterBlock => false
+      }
+    }
+
+    "no longer act on completed scatter for that round" in {
+      for (i <- 0 until 4) {
+        worker ! ScatterBlock(Array(2.0 * i, 2.0 * i), srcId = i, destId = 0, futureRound)
+      }
+
+      expectNoMsg()
+    }
+  }
+
   "Allreduce worker" must {
     "single-round allreduce" in {
       val worker = createNewWorker()
@@ -19,7 +61,8 @@ class AllreduceSpec() extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       val thReduce = 1
       val thComplete = 0.75
       val maxLag = 5
-      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, workers.size * 2)
+      val dataSize = 8
+      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, 8)
       println("============start normal test!===========")
       worker ! StartAllreduce(0)
 
@@ -362,4 +405,5 @@ class AllreduceSpec() extends TestKit(ActorSystem("MySpec")) with ImplicitSender
     } yield (i, self)).toMap
 
   }
+
 }
