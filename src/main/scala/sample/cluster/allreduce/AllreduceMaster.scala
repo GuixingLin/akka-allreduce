@@ -18,7 +18,8 @@ class AllreduceMaster(
   thReduce : Double, 
   thComplete : Double,
   maxLag : Int,
-  dataSize: Int
+  dataSize: Int,
+  maxRound: Int
 ) extends Actor {
 
   var workers = Map[Int, ActorRef]()
@@ -58,7 +59,7 @@ class AllreduceMaster(
       println(s"----node ${c.srcId} completes allreduce round ${c.round}")
       if (c.round == round) {
         numComplete += 1
-        if (numComplete >= totalWorkers * thAllreduce && round < 1000) {
+        if (numComplete >= totalWorkers * thAllreduce && round < maxRound) {
           println(s"----${numComplete} (out of ${totalWorkers}) workers complete round ${round}\n")
           round += 1
           startAllreduce()
@@ -105,6 +106,7 @@ object AllreduceMaster {
     val thReduce = 0.9
     val thComplete = 0.8
     val maxLag = 1
+    val maxRound = 1000
     val port = if (args.isEmpty) "2551" else args(0)
 
     val config = ConfigFactory.parseString(s"akka.remote.netty.tcp.port=$port").
@@ -120,7 +122,8 @@ object AllreduceMaster {
         thAllreduce,
         thReduce, 
         thComplete, 
-        maxLag
+        maxLag,
+        maxRound
       ), 
       name = "master"
     )
