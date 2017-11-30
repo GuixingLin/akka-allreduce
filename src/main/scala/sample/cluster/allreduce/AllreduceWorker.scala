@@ -1,8 +1,6 @@
 package sample.cluster.allreduce
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props, Terminated}
-import akka.pattern.ask
-import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 import sample.cluster.allreduce.buffer.DataBuffer
 
@@ -27,8 +25,8 @@ class AllreduceWorker extends Actor {
   var dataSize = 0
   var data: Array[Double] = Array.empty // store input data
   var dataRange: Array[Int] = Array.empty
-
-  var reducedData: Double = 0 // result of reducing scatterBuf
+  var maxBlockSize = 0
+  var myBlockSize = 0
 
   var scatterBlockBuf: DataBuffer = DataBuffer.empty // store scattered data received
   var reduceBlockBuf: DataBuffer = DataBuffer.empty // store reduced data received
@@ -48,13 +46,10 @@ class AllreduceWorker extends Actor {
       completed = Set[Int]()
 
       dataSize = init.dataSize
-      data = initializeData(dataSize)
+      data = initArray(dataSize)
       dataRange = initDataBlockRanges()
-
-      reducedData = 0
-
-      val myBlockSize = blockSize(id)
-      val maxBlockSize = blockSize(0)
+      myBlockSize = blockSize(id)
+      maxBlockSize = blockSize(0)
 
       scatterBlockBuf = DataBuffer(
         dataSize=myBlockSize,
@@ -86,7 +81,7 @@ class AllreduceWorker extends Actor {
       } else {
         maxRound = math.max(maxRound, s.round)
         while (round < maxRound - maxLag) { // fall behind too much, catch up
-          reducedData = reduce(0)
+          val reducedData = reduce(0)
           broadcast(reducedData, round)
           update(0)
           complete(round)
@@ -110,10 +105,9 @@ class AllreduceWorker extends Actor {
         } else if (s.round <= maxRound) {
           val row = s.round - round
           scatterBlockBuf.store(s.value, row, s.srcId)
-//          if (scatterBuf(row)(peers.size) == peers.size * thReduce) {
           if(scatterBlockBuf.reachThreshold(row)) {
             println(s"----receive ${scatterBlockBuf.count(row)} scattered data (numPeers = ${peers.size}) for round ${s.round}, start reducing")
-            reducedData = reduce(row)
+            val reducedData = reduce(row)
             broadcast(reducedData, s.round)
           }
         } else {
@@ -123,7 +117,8 @@ class AllreduceWorker extends Actor {
       }
 
     case r : ReduceBlock =>
-      println(s"----receive reduced data from round ${r.round}: value = ${r.value}, srcId = ${r.srcId}, destId = ${r.destId}")
+      assert(r.value.size <= maxBlockSize, s"Reduced block of size ${r.value.size} is larger than expected.. Max block size is $maxBlockSize")
+      println(s"----receive reduced data from round ${r.round}: value = ${r.value.toList}, srcId = ${r.srcId}, destId = ${r.destId}")
       if (id == -1) {
         println(s"----I am not initialized yet!!!")
         self ! r
@@ -160,7 +155,7 @@ class AllreduceWorker extends Actor {
     end - start
   }
 
-  private def initializeData(size: Int) = {
+  private def initArray(size: Int) = {
     Array.fill[Double](size)(0)
   }
 
@@ -175,9 +170,9 @@ class AllreduceWorker extends Actor {
 
   private def scatter() = {
     for ((idx, worker) <- peers) {
-      println(s"----send msg ${data(idx)} from ${id} to ${idx}")
-      worker ! ScatterBlock(getDataBlock(idx), id, idx, maxScattered + 1)
-      //      worker ! Scatter(data(idx), id, idx, maxScattered + 1)
+      val dataBlock = getDataBlock(idx)
+      println(s"----send msg ${dataBlock.toList} from ${id} to ${idx}")
+      worker ! ScatterBlock(dataBlock, id, idx, maxScattered + 1)
     }
   }
 
@@ -197,22 +192,24 @@ class AllreduceWorker extends Actor {
     if (idx >= peers.size - 1) (dataRange(idx), data.size) else (dataRange(idx), dataRange(idx + 1))
   }
 
-  private def broadcast(data: Double, bcastRound: Int) = {
+  private def broadcast(data: Array[Double], bcastRound: Int) = {
     println(s"----start broadcasting")
     for ((idx, worker) <- peers) {
-      worker ! ReduceBlock(Array(data), id, idx, bcastRound)
+      worker ! ReduceBlock(data, id, idx, bcastRound)
     }
   }
 
-  private def reduce(row : Int) : Double = {
+  private def reduce(row : Int) : Array[Double] = {
     println(s"----start reducing")
-    reducedData = 0
+    val unreduced = scatterBlockBuf.get(row)
+    val reduced = initArray(myBlockSize)
 
-    for (col <- 0 until peers.size) {
-      //TODO: here assume each array double is only one!!
-      reducedData += scatterBlockBuf.get(row)(col).sum
+    for (i <- 0 until scatterBlockBuf.peerSize) {
+      for (j <- 0 until myBlockSize) {
+        reduced(j) += unreduced(i)(j)
+      }
     }
-    return reducedData
+    return reduced
   }
 
   private def update(row : Int) = {

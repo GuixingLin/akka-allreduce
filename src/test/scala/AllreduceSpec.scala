@@ -3,7 +3,6 @@ import akka.testkit.{ImplicitSender, TestKit}
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 import sample.cluster.allreduce._
 
-import scala.collection.immutable.HashMap
 import scala.util.Random
 
 class AllreduceSpec() extends TestKit(ActorSystem("MySpec")) with ImplicitSender
@@ -14,42 +13,43 @@ class AllreduceSpec() extends TestKit(ActorSystem("MySpec")) with ImplicitSender
 
   "Allreduce worker" must {
     "single-round allreduce" in {
-      val worker = createNewWorker("worker")
-      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf
+      val worker = createNewWorker()
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
       val idx = 0
       val thReduce = 1
       val thComplete = 0.75
       val maxLag = 5
-      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, workers.size)
+      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, workers.size * 2)
       println("============start normal test!===========")
       worker ! StartAllreduce(0)
 
-      for {
-        i <- 0 until 4
-      } yield {
-        expectScatter(ScatterBlock(Array(1.0 * i), 0, i, 0))
+      // expect scattering to other nodes
+      for (i <- 0 until 4) {
+        expectScatter(ScatterBlock(Array(2.0 * i, 2.0 * i + 1), 0, i, 0))
       }
 
-      for {
-        i <- 0 until 4
-      } yield {
-        worker ! ScatterBlock(Array(2.0 * i), srcId = i, destId = 0, 0)
+      // simulate sending scatter from other nodes
+      for (i <- 0 until 4) {
+        worker ! ScatterBlock(Array(2.0 * i, 2.0 * i), srcId = i, destId = 0, 0)
       }
 
-      expectReduce(ReduceBlock(Array(12), 0, 0, 0))
-      expectReduce(ReduceBlock(Array(12), 0, 1, 0))
-      expectReduce(ReduceBlock(Array(12), 0, 2, 0))
-      expectReduce(ReduceBlock(Array(12), 0, 3, 0))
-      worker ! ReduceBlock(Array(12), 0, 0, 0)
-      worker ! ReduceBlock(Array(11), 1, 0, 0)
-      worker ! ReduceBlock(Array(10), 2, 0, 0)
-      worker ! ReduceBlock(Array(9), 3, 0, 0)
+      // expect sending reduced result to other nodes
+      expectReduce(ReduceBlock(Array(12, 12), 0, 0, 0))
+      expectReduce(ReduceBlock(Array(12, 12), 0, 1, 0))
+      expectReduce(ReduceBlock(Array(12, 12), 0, 2, 0))
+      expectReduce(ReduceBlock(Array(12, 12), 0, 3, 0))
+
+      // simulate sending reduced block from other nodes
+      worker ! ReduceBlock(Array(12, 15), 0, 0, 0)
+      worker ! ReduceBlock(Array(11, 10), 1, 0, 0)
+      worker ! ReduceBlock(Array(10, 20), 2, 0, 0)
+      worker ! ReduceBlock(Array(9, 10), 3, 0, 0)
       expectMsg(CompleteAllreduce(0, 0))
     }
 
     "multi-round allreduce" in {
-      val worker = createNewWorker("worker2")
-      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf
+      val worker = createNewWorker()
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
       val idx = 0
       val thReduce = 1
       val thComplete = 0.75
@@ -78,8 +78,8 @@ class AllreduceSpec() extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       }
     }
     "missed scatter" in {
-      val worker = createNewWorker("worker3")
-      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf
+      val worker = createNewWorker()
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
       val idx = 0
       val thReduce = 0.75
       val thComplete = 0.75
@@ -108,8 +108,8 @@ class AllreduceSpec() extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       expectMsg(CompleteAllreduce(0, 0))
     }
     "missed reduce" in {
-      val worker = createNewWorker("worker4")
-      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf
+      val worker = createNewWorker()
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
       val idx = 0
       val thReduce = 1
       val thComplete = 0.75
@@ -138,8 +138,8 @@ class AllreduceSpec() extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       expectMsg(CompleteAllreduce(0, 0))
     }
     "future scatter" in {
-      val worker = createNewWorker("worker5")
-      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf
+      val worker = createNewWorker()
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
       val idx = 0
       val thReduce = 0.75
       val thComplete = 0.75
@@ -188,8 +188,8 @@ class AllreduceSpec() extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       expectMsg(CompleteAllreduce(0, 1))
     }
     "delayed future reduce" in {
-      val worker = createNewWorker("worker6")
-      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf
+      val worker = createNewWorker()
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
       val idx = 0
       val thReduce = 0.75
       val thComplete = 0.75
@@ -234,8 +234,8 @@ class AllreduceSpec() extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       expectMsg(CompleteAllreduce(0, 1))
     }
     "simple catchup" in {
-      val worker = createNewWorker("worker7")
-      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf
+      val worker = createNewWorker()
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
       val idx = 0
       val thReduce = 1
       val thComplete = 1
@@ -277,10 +277,9 @@ class AllreduceSpec() extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       expectScatter(ScatterBlock(Array(3 + 7), 0, 3, 7))
     }
     "cold catchup" in {
-      val workerName = "worker8"
       // extreme case of catch up, only for test use
-      val worker = createNewWorker(workerName)
-      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf
+      val worker = createNewWorker()
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
       val idx = 0
       val thReduce = 1
       val thComplete = 1
@@ -306,14 +305,14 @@ class AllreduceSpec() extends TestKit(ActorSystem("MySpec")) with ImplicitSender
 
     "buffer when unitialized" in {
 
-      val worker = createNewWorker("")
+      val worker = createNewWorker()
       worker ! StartAllreduce(0)
       expectNoMsg()
       val idx = 0
       val thReduce = 1
       val thComplete = 1
       val maxLag = 5
-      val workers = initializeWorkersAsSelf
+      val workers = initializeWorkersAsSelf(4)
       worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, workers.size)
       expectScatter(ScatterBlock(Array(0.0), 0, 0, 0))
       expectScatter(ScatterBlock(Array(1.0), 0, 1, 0))
@@ -327,6 +326,7 @@ class AllreduceSpec() extends TestKit(ActorSystem("MySpec")) with ImplicitSender
   /**
     * Expect scatter block containing array. This is needed beause message contains Array which cannot be
     * assert with scala default pattern matching
+    *
     * @param expected
     * @return
     */
@@ -351,12 +351,15 @@ class AllreduceSpec() extends TestKit(ActorSystem("MySpec")) with ImplicitSender
   }
 
 
-  private def createNewWorker(workerName: String) = {
+  private def createNewWorker() = {
     system.actorOf(Props[AllreduceWorker], name = Random.alphanumeric.take(10).mkString)
   }
 
-  private def initializeWorkersAsSelf = {
-    val workers: Map[Int, ActorRef] = HashMap(0 -> self, 1 -> self, 2 -> self, 3 -> self)
-    workers
+  private def initializeWorkersAsSelf(size: Int): Map[Int, ActorRef] = {
+
+    (for {
+      i <- 0 until size
+    } yield (i, self)).toMap
+
   }
 }
