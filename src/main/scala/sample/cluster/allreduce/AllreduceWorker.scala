@@ -94,7 +94,7 @@ class AllreduceWorker extends Actor {
       }
 
     case s : ScatterBlock =>
-      println(s"----receive scattered data from round ${s.round}: value = ${s.value}, srcId = ${s.srcId}, destId = ${s.destId}, current round = $round")
+      println(s"----receive scattered data from round ${s.round}: value = ${s.value.toList}, srcId = ${s.srcId}, destId = ${s.destId}, current round = $round")
       if (id == -1) {
         println(s"----I am not initialized yet!!!")
         self ! s

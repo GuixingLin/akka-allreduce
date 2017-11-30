@@ -367,11 +367,8 @@ class AllreduceSpec() extends TestKit(ActorSystem("MySpec")) with ImplicitSender
   }
 
   /**
-    * Expect scatter block containing array. This is needed beause message contains Array which cannot be
-    * assert with scala default pattern matching
-    *
-    * @param expected
-    * @return
+    * Expect scatter block containing array value. This is needed because standard expectMsg will not be able to match
+    * mutable Array and check for equality during assertion.
     */
   private def expectScatter(expected: ScatterBlock) = {
     receiveOne(remainingOrDefault) match {
@@ -383,6 +380,10 @@ class AllreduceSpec() extends TestKit(ActorSystem("MySpec")) with ImplicitSender
     }
   }
 
+  /**
+    * Expect reduce block containing array value. This is needed because standard expectMsg will not be able to match
+    * mutable Array and check for equality during assertion.
+    */
   private def expectReduce(expected: ReduceBlock) = {
     receiveOne(remainingOrDefault) match {
       case r: ReduceBlock =>
