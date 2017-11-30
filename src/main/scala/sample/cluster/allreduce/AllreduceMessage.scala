@@ -18,6 +18,6 @@ final case class Scatter(value : Double, srcId : Int, destId : Int, round : Int)
 final case class ScatterBlock(value : Array[Double], srcId : Int, destId : Int, round : Int)
 
 final case class Reduce(value : Double, srcId : Int, destId : Int, round : Int)
-final case class ReduceBlock(value: Array[Double], srcId : Int, destId : Int, count : Int, round : Int)
+final case class ReduceBlock(value: Array[Double], srcId : Int, destId : Int, round : Int)
 
 final case class CompleteAllreduce(srcId : Int, round : Int)

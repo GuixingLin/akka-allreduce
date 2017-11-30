@@ -59,6 +59,7 @@ class AllreduceWorker extends Actor {
       reducedData = 0
 
       val myBlockSize = blockSize(id)
+      val maxBlockSize = blockSize(0)
 
       for (row <- 0 to maxLag) {
 //        scatterBuf(row) = new Array[Double](peers.size + 1) // extra space for tracking number of elems
@@ -69,6 +70,13 @@ class AllreduceWorker extends Actor {
         peerSize = peers.size,
         maxLag = maxLag + 1,
         threshold = thReduce
+      )
+
+      reduceBlockBuf = DataBuffer(
+        dataSize=maxBlockSize,
+        peerSize = peers.size,
+        maxLag=maxLag + 1,
+        threshold = thComplete
       )
 
       println(s"----id = ${id}")
@@ -123,7 +131,7 @@ class AllreduceWorker extends Actor {
         }
       }
 
-    case r : Reduce =>
+    case r : ReduceBlock =>
       println(s"----receive reduced data from round ${r.round}: value = ${r.value}, srcId = ${r.srcId}, destId = ${r.destId}")
       if (id == -1) {
         println(s"----I am not initialized yet!!!")
@@ -201,7 +209,7 @@ class AllreduceWorker extends Actor {
   private def broadcast(data: Double, bcastRound: Int) = {
     println(s"----start broadcasting")
     for ((idx, worker) <- peers) {
-      worker ! Reduce(data, id, idx, bcastRound)
+      worker ! ReduceBlock(Array(data), id, idx, bcastRound)
     }
   }
 
@@ -214,8 +222,8 @@ class AllreduceWorker extends Actor {
     scatterBlockBuf.store(data, row, srcId)
   }
 
-  private def storeReducedData(data: Double, srcId : Int, row : Int) = {
-    reduceBuf(row)(srcId) = data
+  private def storeReducedData(data: Array[Double], srcId : Int, row : Int) = {
+    reduceBuf(row)(srcId) = data(0)
     reduceBuf(row)(peers.size) += 1
   }
 
