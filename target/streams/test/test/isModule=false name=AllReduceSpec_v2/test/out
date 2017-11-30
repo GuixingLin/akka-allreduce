@@ -1,0 +1,4 @@
+[0m[[0minfo[0m] [0m[32mAllReduceSpec_v2:[0m[0m
+[0m[[0minfo[0m] [0m[32mEarly receiving reduce[0m[0m
+[0m[[0minfo[0m] [0m[32m- must send complete to master[0m[0m
+[0m[[0minfo[0m] [0m[32m- must no longer act on completed scatter for that round[0m[0m

@@ -3,9 +3,12 @@ package sample.cluster.allreduce.buffer
 case class DataBuffer(dataSize: Int,
                       peerSize: Int,
                       maxLag: Int,
-                      threshold: Double) {
+                      threshold: Float,
+                      maxMsgSize: Int) { 
 
-  type Buffer = Array[Array[Double]]
+  //maxMsgSize is the maximum size of the msg that is allowed on the wire
+
+  type Buffer = Array[Array[Float]]
 
   var temporalBuffer: Array[Buffer] = {
     Array.fill(maxLag) {
@@ -21,19 +24,19 @@ case class DataBuffer(dataSize: Int,
 
   private var countFilled: Array[Int] = Array.fill(maxLag)(0)
 
-  private val minRequired: Int = (threshold * peerSize).toInt
+  private val minRequired: Int = (threshold * peerSize * math.ceil(1f * dataSize / maxMsgSize).toInt).toInt
 
   def reachThreshold(row: Int): Boolean = {
     countFilled(row) == minRequired
   }
 
-  def store(data: Array[Double], row: Int, srcId: Int, pos: Int = 0) = {
-
+  def store(data: Array[Float], row: Int, srcId: Int, chunkId: Int, pos: Int = 0) = {
     val array = temporalBuffer(row)(srcId)
-
+    //debug
+    //println(s"---Array length: ${array.length}; Data length: ${data.length}")
     System.arraycopy(
       data, 0,
-      array, pos,
+      array, chunkId * maxMsgSize,
       data.size)
 
     countFilled(row) += 1
@@ -60,6 +63,6 @@ case class DataBuffer(dataSize: Int,
 
 object DataBuffer {
   def empty = {
-    DataBuffer(0, 0, 0, 0)
+    DataBuffer(0, 0, 0, 0f, 1024)
   }
 }
