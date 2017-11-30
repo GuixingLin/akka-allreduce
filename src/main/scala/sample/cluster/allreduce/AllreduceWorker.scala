@@ -4,6 +4,7 @@ import akka.actor.{Actor, ActorRef, ActorSystem, Props, Terminated}
 import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
+import sample.cluster.allreduce.buffer.DataBuffer
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
@@ -12,36 +13,39 @@ import scala.language.postfixOps
 class AllreduceWorker extends Actor {
 
   var id = -1 // node id
-  var master : Option[ActorRef] = None
-  var peers = Map[Int, ActorRef]()  // workers in the same row/col, including self
-  var thReduce = 1.0    // pct of scattered data needed to start reducing 
-  var thComplete = 1.0  // pct of reduced data needed to complete current round
-  var maxLag = 0        // number of rounds allowed for a worker to fall behind
-  var round = -1        // current (unfinished) round of allreduce, can potentially be maxRound+1
-  var maxRound = -1     // most updated timestamp received for StartAllreduce
+  var master: Option[ActorRef] = None
+  var peers = Map[Int, ActorRef]() // workers in the same row/col, including self
+  var thReduce = 1.0 // pct of scattered data needed to start reducing
+  var thComplete = 1.0 // pct of reduced data needed to complete current round
+  var maxLag = 0 // number of rounds allowed for a worker to fall behind
+  var round = -1 // current (unfinished) round of allreduce, can potentially be maxRound+1
+  var maxRound = -1 // most updated timestamp received for StartAllreduce
   var maxScattered = -1 // most updated timestamp where scatter() has been called
   var completed = Set[Int]() // set of completed rounds
 
   // Data
   var dataSize = 0
   var blockSize = 0
-  var data : Array[Double] = Array.empty                // store input data
-  var dataRange = Array.emptyIntArray
+  var data: Array[Double] = Array.empty // store input data
+  var dataRange: Array[Int] = Array.empty
 
-  var scatterBuf : Array[Array[Double]] = Array.empty   // store scattered data received
-  var reduceBuf : Array[Array[Double]] = Array.empty    // store reduced data received
-  var reducedData : Double = 0  // result of reducing scatterBuf
+  var scatterBuf: Array[Array[Double]] = Array.empty // store scattered data received
+  var reduceBuf: Array[Array[Double]] = Array.empty // store reduced data received
+  var reducedData: Double = 0 // result of reducing scatterBuf
+
+  var scatterBlockBuf: DataBuffer = DataBuffer.empty
+  var reduceBlockBuf: DataBuffer = DataBuffer.empty
 
   def receive = {
 
-    case init : InitWorkers =>
+    case init: InitWorkers =>
       id = init.destId
       master = Some(init.master)
       peers = init.workers
       thReduce = init.thReduce
       thComplete = init.thComplete
       maxLag = init.maxLag
-      round = 0    // clear round info to start over
+      round = 0 // clear round info to start over
       maxRound = -1
       maxScattered = -1
       completed = Set[Int]()
@@ -50,22 +54,30 @@ class AllreduceWorker extends Actor {
       data = initializeData(dataSize)
       dataRange = initDataBlockRanges()
 
-
       scatterBuf = new Array[Array[Double]](maxLag + 1)
       reduceBuf = new Array[Array[Double]](maxLag + 1)
       reducedData = 0
 
+      val myBlockSize = blockSize(id)
+
       for (row <- 0 to maxLag) {
-        scatterBuf(row) = new Array[Double](peers.size + 1) // extra space for tracking number of elems
+//        scatterBuf(row) = new Array[Double](peers.size + 1) // extra space for tracking number of elems
         reduceBuf(row) = new Array[Double](peers.size + 1)
       }
+      scatterBlockBuf = DataBuffer(
+        dataSize=myBlockSize,
+        peerSize = peers.size,
+        maxLag = maxLag + 1,
+        threshold = thReduce
+      )
+
       println(s"----id = ${id}")
       for (i <- 0 until peers.size) {
         println(s"----peers[${i}] = ${peers(i)}")
       }
       println(s"----number of peers = ${peers.size}")
       println(s"----thReduce = ${thReduce}, thComplete = ${thComplete}, maxLag = ${maxLag}")
-      println(s"----size of buffer: ${scatterBuf.size} x ${scatterBuf(0).size}")
+      println(s"----size of buffer: ${scatterBlockBuf.maxLag} x ${scatterBlockBuf.peerSize} x ${scatterBlockBuf.dataSize}")
 
     case s : StartAllreduce =>
       println(s"----start allreduce round ${s.round}")
@@ -88,7 +100,7 @@ class AllreduceWorker extends Actor {
       }
 
     case s : ScatterBlock =>
-      println(s"----receive scattered data from round ${s.round}: value = ${s.value}, srcId = ${s.srcId}, destId = ${s.destId}")
+      println(s"----receive scattered data from round ${s.round}: value = ${s.value}, srcId = ${s.srcId}, destId = ${s.destId}, current round = $round")
       if (id == -1) {
         println(s"----I am not initialized yet!!!")
         self ! s
@@ -99,8 +111,9 @@ class AllreduceWorker extends Actor {
         } else if (s.round <= maxRound) {
           val row = s.round - round
           storeScatterBlockData(s.value, s.srcId, row)
-          if (scatterBuf(row)(peers.size) == peers.size * thReduce) {
-            println(s"----receive ${scatterBuf(row)(peers.size)} scattered data (numPeers = ${peers.size}) for round ${s.round}, start reducing")
+//          if (scatterBuf(row)(peers.size) == peers.size * thReduce) {
+          if(scatterBlockBuf.reachThreshold(row)) {
+            println(s"----receive ${scatterBlockBuf.count(row)} scattered data (numPeers = ${peers.size}) for round ${s.round}, start reducing")
             reducedData = reduce(row)
             broadcast(reducedData, s.round)
           }
@@ -142,6 +155,12 @@ class AllreduceWorker extends Actor {
       }
   }
 
+
+  private def blockSize(id: Int) = {
+    val (start, end) = range(id)
+    end - start
+  }
+
   private def initializeData(size: Int) = {
     Array.fill[Double](size)(0)
   }
@@ -159,7 +178,7 @@ class AllreduceWorker extends Actor {
     for ((idx, worker) <- peers) {
       println(s"----send msg ${data(idx)} from ${id} to ${idx}")
       worker ! ScatterBlock(getDataBlock(idx), id, idx, maxScattered + 1)
-//      worker ! Scatter(data(idx), id, idx, maxScattered + 1)
+      //      worker ! Scatter(data(idx), id, idx, maxScattered + 1)
     }
   }
 
@@ -169,13 +188,17 @@ class AllreduceWorker extends Actor {
   }
 
   private def getDataBlock(idx: Int): Array[Double] = {
-    val (start, end) = if (idx >= peers.size - 1) (dataRange(idx), data.size) else (dataRange(idx), dataRange(idx + 1))
+    val (start, end) = range(idx)
     val block = new Array[Double](end - start)
     System.arraycopy(data, start, block, 0, end - start)
     block
   }
 
-  private def broadcast(data : Double, bcastRound : Int) = {
+  private def range(idx: Int): (Int, Int) = {
+    if (idx >= peers.size - 1) (dataRange(idx), data.size) else (dataRange(idx), dataRange(idx + 1))
+  }
+
+  private def broadcast(data: Double, bcastRound: Int) = {
     println(s"----start broadcasting")
     for ((idx, worker) <- peers) {
       worker ! Reduce(data, id, idx, bcastRound)
@@ -187,9 +210,8 @@ class AllreduceWorker extends Actor {
     scatterBuf(row)(peers.size) += 1
   }
 
-  private def storeScatterBlockData(data : Array[Double], srcId : Int, row : Int) = {
-    System.arraycopy(data, 0, scatterBuf(row), dataRange(srcId), data.size)
-    scatterBuf(row)(peers.size) += 1
+  private def storeScatterBlockData(data: Array[Double], srcId: Int, row: Int) = {
+    scatterBlockBuf.store(data, row, srcId)
   }
 
   private def storeReducedData(data: Double, srcId : Int, row : Int) = {
@@ -200,8 +222,10 @@ class AllreduceWorker extends Actor {
   private def reduce(row : Int) : Double = {
     println(s"----start reducing")
     reducedData = 0
+
     for (col <- 0 until peers.size) {
-      reducedData += scatterBuf(row)(col)
+      //TODO: here assume each array double is only one!!
+      reducedData += scatterBlockBuf.get(row)(col).sum
     }
     return reducedData
   }
@@ -218,7 +242,8 @@ class AllreduceWorker extends Actor {
     if (round == completedRound) {
       do {
         round += 1
-        bufferUp(scatterBuf)
+//        bufferUp(scatterBuf)
+        scatterBlockBuf.up()
         bufferUp(reduceBuf)
       } while (completed.contains(round))
     }
