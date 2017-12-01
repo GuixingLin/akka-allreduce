@@ -49,6 +49,10 @@ case class DataBuffer(dataSize: Int,
     countFilled(row)(chunkId)
   }
 
+  def get(row: Int): Buffer = {
+    temporalBuffer(row)
+  }
+
   def get(row: Int, chunkId: Int): (Buffer, Int) = {
     //temporalBuffer(row)
     var endPos = math.min(dataSize, (chunkId + 1) * maxChunkSize)

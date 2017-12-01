@@ -97,7 +97,7 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
             broadcast(reducedData, k, round)
             //update(0)
           }
-          complete(round)
+          complete(round, 0)
         }
         while (maxScattered < maxRound) {
           fetch(maxScattered + 1)
@@ -144,7 +144,7 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
           reduceBlockBuf.store(r.value, row, r.srcId, r.chunkId)
           if (reduceBlockBuf.reachRoundThreshold(row)) {
             println(s"----receive enough reduced data (numPeers = ${peers.size} for round ${r.round}, complete")
-            complete(r.round)
+            complete(r.round, row)
           }
         } else {
           self ! StartAllreduce(r.round)
@@ -180,9 +180,9 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
     data = input.data
   }
 
-  private def flush(completedRound: Int) = {
+  private def flush(completedRound: Int, row: Int) = {
 
-    val output: Array[Array[Float]] = reduceBlockBuf.get(completedRound)
+    val output: Array[Array[Float]] = reduceBlockBuf.get(row)
     val dataOutput = Array.fill[Float](data.size)(0.0f)
     var transferred = 0
     for (chunk <-  output) {
@@ -253,10 +253,10 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
     println(s"----update round ${round + row}")
   }
 
-  private def complete(completedRound: Int) = {
+  private def complete(completedRound: Int, row: Int) = {
     println(s"----complete allreduce round ${completedRound}\n")
 
-    flush(completedRound)
+    flush(completedRound, row)
 
     data = Array.empty
     master.orNull ! CompleteAllreduce(id, completedRound)

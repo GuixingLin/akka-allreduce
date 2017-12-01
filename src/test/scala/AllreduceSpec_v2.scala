@@ -11,6 +11,23 @@ class AllReduceSpec_v2() extends TestKit(ActorSystem("MySpec")) with ImplicitSen
     TestKit.shutdownActorSystem(system)
   }
 
+  type DataSink = AllReduceOutput => Unit
+  type DataSource = AllReduceInputRequest => AllReduceInput
+
+  //basic setup
+
+  val source: DataSource = createDataSource(8)
+  val sink: DataSink = r => {
+    println(s"Data output at #${r.iteration}: ${r.data.toList}")
+  }
+
+  def createDataSource(size: Int) : DataSource = {
+    req => {
+      val floats = Array.range(0, size).map(_ + req.iteration.toFloat)
+      println(s"Data source at #${req.iteration}: ${floats.toList}")
+      AllReduceInput(floats)
+    }
+  }
 
   "Early receiving reduce" must {
 
@@ -22,15 +39,17 @@ class AllReduceSpec_v2() extends TestKit(ActorSystem("MySpec")) with ImplicitSen
     val maxMsgSize = 2;
     val numActors = 4;
 
-    val worker = createNewWorker()
+    val worker = createNewWorker(source, sink)
     val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(numActors)
     val futureRound = 3
+
+
 
     "send complete to master" in {
 
       worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxMsgSize)
       worker ! StartAllreduce(0)
-      
+
       worker ! ReduceBlock(Array(12f, 15f), 0, 0, 0, futureRound)
       worker ! ReduceBlock(Array(11f, 10f), 1, 0, 0, futureRound)
       worker ! ReduceBlock(Array(10f, 20f), 2, 0, 0, futureRound)
@@ -57,7 +76,7 @@ class AllReduceSpec_v2() extends TestKit(ActorSystem("MySpec")) with ImplicitSen
 
   "Allreduce worker" must {
     "single-round allreduce" in {
-      val worker = createNewWorker()
+      val worker = createNewWorker(source, sink)
       val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
       val idx = 0
       val thReduce = 1f
@@ -94,16 +113,17 @@ class AllReduceSpec_v2() extends TestKit(ActorSystem("MySpec")) with ImplicitSen
       worker ! ReduceBlock(Array(9f, 10f), 3, 0, 0, 0)
       expectMsg(CompleteAllreduce(0, 0))
     }
-    
+
 
     "single-round allreduce with nasty chunk size" in {
-      val worker = createNewWorker()
+
+      val dataSize = 6
+      val worker = createNewWorker(createDataSource(dataSize), sink)
       val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(2)
       val idx = 0
       val thReduce = 0.9f
       val thComplete = 0.8f
       val maxLag = 5
-      val dataSize = 6
       val maxChunkSize = 2
       val numActors = 2
 
@@ -133,22 +153,22 @@ class AllReduceSpec_v2() extends TestKit(ActorSystem("MySpec")) with ImplicitSen
       // simulate sending reduced block from other nodes
       worker ! ReduceBlock(Array(0f, 2f), 0, 0, 0, 0)
       worker ! ReduceBlock(Array(4f), 0, 0, 1, 0)
-      
+
       worker ! ReduceBlock(Array(6f, 8f), 1, 0, 0, 0)
       expectMsg(CompleteAllreduce(0, 0))
       worker ! ReduceBlock(Array(10f), 1, 0, 1, 0)
 
-     
+
     }
 
     "single-round allreduce with nasty chunk size contd" in {
-      val worker = createNewWorker()
+      val dataSize = 9
+      val worker = createNewWorker(createDataSource(dataSize), sink)
       val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(3)
       val idx = 0
       val thReduce = 0.7f
       val thComplete = 0.7f
       val maxLag = 5
-      val dataSize = 9
       val maxChunkSize = 1
       val numActors = 2
 
@@ -207,7 +227,7 @@ class AllReduceSpec_v2() extends TestKit(ActorSystem("MySpec")) with ImplicitSen
     }
 
     "multi-round allreduce" in {
-      val worker = createNewWorker()
+      val worker = createNewWorker(source, sink)
       val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
       val idx = 0
       val thReduce = 0.8f
@@ -242,7 +262,7 @@ class AllReduceSpec_v2() extends TestKit(ActorSystem("MySpec")) with ImplicitSen
     }
 
      "multi-round allreduce v2" in {
-      val worker = createNewWorker()
+      val worker = createNewWorker(source, sink)
       val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(2)
       val idx = 0
       val thReduce = 0.6f
@@ -265,7 +285,7 @@ class AllReduceSpec_v2() extends TestKit(ActorSystem("MySpec")) with ImplicitSen
         worker ! ScatterBlock(Array(12f + i, 13f + i), 1, 0, 1, i)
         expectReduce(ReduceBlock(Array(0f * 1 + 1 * i, 1f * 1 + 1 * i), 0, 0, 0, i))
         expectReduce(ReduceBlock(Array(0f * 1 + 1 * i, 1f * 1 + 1 * i), 0, 1, 0, i))
-        expectReduce(ReduceBlock(Array(2f * 1 + 1 * i, 3f * 1 + 1 * i), 0, 0, 1, i)) 
+        expectReduce(ReduceBlock(Array(2f * 1 + 1 * i, 3f * 1 + 1 * i), 0, 0, 1, i))
         expectReduce(ReduceBlock(Array(2f * 1 + 1 * i, 3f * 1 + 1 * i), 0, 1, 1, i))
         worker ! ReduceBlock(Array(1f, 2f), 0, 0, 0, i)
         worker ! ReduceBlock(Array(1f, 2f), 0, 0, 1, i)
@@ -273,12 +293,11 @@ class AllReduceSpec_v2() extends TestKit(ActorSystem("MySpec")) with ImplicitSen
         expectMsg(CompleteAllreduce(0, i))
         worker ! ReduceBlock(Array(1f, 2f), 1, 0, 1, i)
         expectNoMsg()
-        
+
       }
     }
 
     "missed scatter" in {
-      val worker = createNewWorker()
       val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
       val idx = 0
       val thReduce = 0.75f
@@ -286,6 +305,8 @@ class AllReduceSpec_v2() extends TestKit(ActorSystem("MySpec")) with ImplicitSen
       val maxLag = 5
       val dataSize = 4
       val maxChunkSize = 2
+      val worker = createNewWorker(createDataSource(dataSize), sink)
+
       worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       println("===============start outdated scatter test!==============")
       worker ! StartAllreduce(0)
@@ -313,7 +334,6 @@ class AllReduceSpec_v2() extends TestKit(ActorSystem("MySpec")) with ImplicitSen
     }
 
     "future scatter" in {
-      val worker = createNewWorker()
       val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
       val idx = 0
       val thReduce = 0.75f
@@ -321,6 +341,7 @@ class AllReduceSpec_v2() extends TestKit(ActorSystem("MySpec")) with ImplicitSen
       val maxLag = 5
       val dataSize = 4
       val maxChunkSize = 2
+      val worker = createNewWorker(createDataSource(dataSize), sink)
       worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       println("===============start missing test!==============")
       worker ! StartAllreduce(0)
@@ -366,7 +387,6 @@ class AllReduceSpec_v2() extends TestKit(ActorSystem("MySpec")) with ImplicitSen
     }
 
     "missed reduce" in {
-      val worker = createNewWorker()
       val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
       val idx = 0
       val thReduce = 1f
@@ -374,6 +394,8 @@ class AllReduceSpec_v2() extends TestKit(ActorSystem("MySpec")) with ImplicitSen
       val dataSize = 4
       val maxChunkSize = 100
       val maxLag = 5
+      val worker = createNewWorker(createDataSource(dataSize), sink)
+
       worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       println("===============start missing test!==============")
       worker ! StartAllreduce(0)
@@ -399,7 +421,6 @@ class AllReduceSpec_v2() extends TestKit(ActorSystem("MySpec")) with ImplicitSen
     }
 
     "delayed future reduce" in {
-      val worker = createNewWorker()
       val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
       val idx = 0
       val thReduce = 0.75f
@@ -407,6 +428,8 @@ class AllReduceSpec_v2() extends TestKit(ActorSystem("MySpec")) with ImplicitSen
       val dataSize = 4
       val maxChunkSize = 100
       val maxLag = 5
+      val worker = createNewWorker(createDataSource(4), sink)
+
       worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       println("===============start delayed future reduce test!==============")
       worker ! StartAllreduce(0)
@@ -452,7 +475,7 @@ class AllReduceSpec_v2() extends TestKit(ActorSystem("MySpec")) with ImplicitSen
   "Catch up" must {
 
     "simple catchup" in {
-      val worker = createNewWorker()
+      val worker = createNewWorker(source, sink)
       val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
       val idx = 0
       val thReduce = 1
@@ -479,7 +502,7 @@ class AllReduceSpec_v2() extends TestKit(ActorSystem("MySpec")) with ImplicitSen
 
     "cold catchup" in {
       // extreme case of catch up, only for test use
-      val worker = createNewWorker()
+      val worker = createNewWorker(source, sink)
       val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
       val idx = 0
       val thReduce = 1
@@ -504,7 +527,7 @@ class AllReduceSpec_v2() extends TestKit(ActorSystem("MySpec")) with ImplicitSen
 
     "buffer when unitialized" in {
 
-      val worker = createNewWorker()
+      val worker = createNewWorker(source, sink)
       worker ! StartAllreduce(0)
       expectNoMsg()
       val idx = 0
@@ -584,9 +607,15 @@ class AllReduceSpec_v2() extends TestKit(ActorSystem("MySpec")) with ImplicitSen
     }
   }
 
-
-  private def createNewWorker() = {
-    system.actorOf(Props[AllreduceWorker], name = Random.alphanumeric.take(10).mkString)
+  private def createNewWorker(source: DataSource, sink: DataSink) = {
+    system.actorOf(
+      Props(
+        classOf[AllreduceWorker],
+        source,
+        sink
+      ),
+      name = Random.alphanumeric.take(10).mkString
+    )
   }
 
   private def initializeWorkersAsSelf(size: Int): Map[Int, ActorRef] = {
