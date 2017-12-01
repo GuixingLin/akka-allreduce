@@ -8,13 +8,14 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-class AllreduceWorker extends Actor {
+class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
+                      dataSink: AllReduceOutput => Unit) extends Actor {
 
   var id = -1 // node id
   var master: Option[ActorRef] = None
   var peers = Map[Int, ActorRef]() // workers in the same row/col, including self
-  var thReduce = 1.0 // pct of scattered data needed to start reducing
-  var thComplete = 1.0 // pct of reduced data needed to complete current round
+  var thReduce = 1f // pct of scattered data needed to start reducing
+  var thComplete = 1f // pct of reduced data needed to complete current round
   var maxLag = 0 // number of rounds allowed for a worker to fall behind
   var round = -1 // current (unfinished) round of allreduce, can potentially be maxRound+1
   var maxRound = -1 // most updated timestamp received for StartAllreduce
@@ -23,13 +24,18 @@ class AllreduceWorker extends Actor {
 
   // Data
   var dataSize = 0
-  var data: Array[Double] = Array.empty // store input data
+  var data: Array[Float] = Array.empty // store input data
   var dataRange: Array[Int] = Array.empty
   var maxBlockSize = 0
   var myBlockSize = 0
 
   var scatterBlockBuf: DataBuffer = DataBuffer.empty // store scattered data received
   var reduceBlockBuf: DataBuffer = DataBuffer.empty // store reduced data received
+
+  var maxChunkSize = 1024; // maximum msg size that is allowed on the wire
+
+  var myNumChunks = 0
+  var maxNumChunks = 0;
 
   def receive = {
 
@@ -50,19 +56,24 @@ class AllreduceWorker extends Actor {
       dataRange = initDataBlockRanges()
       myBlockSize = blockSize(id)
       maxBlockSize = blockSize(0)
+      maxChunkSize = init.maxChunkSize
+      myNumChunks = math.ceil(1f * myBlockSize / maxChunkSize).toInt
+      maxNumChunks = math.ceil(1f * maxBlockSize / maxChunkSize).toInt
 
       scatterBlockBuf = DataBuffer(
-        dataSize=myBlockSize,
+        dataSize = myBlockSize,
         peerSize = peers.size,
         maxLag = maxLag + 1,
-        threshold = thReduce
+        threshold = thReduce,
+        maxChunkSize = maxChunkSize
       )
 
       reduceBlockBuf = DataBuffer(
-        dataSize=maxBlockSize,
+        dataSize = maxBlockSize,
         peerSize = peers.size,
-        maxLag=maxLag + 1,
-        threshold = thComplete
+        maxLag = maxLag + 1,
+        threshold = thComplete,
+        maxChunkSize = maxChunkSize
       )
 
       println(s"----id = ${id}")
@@ -73,18 +84,20 @@ class AllreduceWorker extends Actor {
       println(s"----thReduce = ${thReduce}, thComplete = ${thComplete}, maxLag = ${maxLag}")
       println(s"----size of buffer: ${scatterBlockBuf.maxLag} x ${scatterBlockBuf.peerSize} x ${scatterBlockBuf.dataSize}")
 
-    case s : StartAllreduce =>
+    case s: StartAllreduce =>
       println(s"----start allreduce round ${s.round}")
       if (id == -1) {
-        println(s"----I am not initialized yet!!!")
+        println(s"----Have not initialized!")
         self ! s
       } else {
         maxRound = math.max(maxRound, s.round)
         while (round < maxRound - maxLag) { // fall behind too much, catch up
-          val reducedData = reduce(0)
-          broadcast(reducedData, round)
-          update(0)
-          complete(round)
+          for (k <-0 until myNumChunks){
+            val reducedData = reduce(0, k)
+            broadcast(reducedData, k, round)
+            //update(0)
+          }
+          complete(round, 0)
         }
         while (maxScattered < maxRound) {
           fetch(maxScattered + 1)
@@ -93,10 +106,10 @@ class AllreduceWorker extends Actor {
         }
       }
 
-    case s : ScatterBlock =>
-      println(s"----receive scattered data from round ${s.round}: value = ${s.value.toList}, srcId = ${s.srcId}, destId = ${s.destId}, current round = $round")
+    case s: ScatterBlock =>
+      println(s"----receive scattered data from round ${s.round}: value = ${s.value.toList}, srcId = ${s.srcId}, destId = ${s.destId}, chunkId=${s.chunkId}, current round = $round")
       if (id == -1) {
-        println(s"----I am not initialized yet!!!")
+        println(s"----Have not initialized!")
         self ! s
       } else {
         assert(s.destId == id)
@@ -104,11 +117,11 @@ class AllreduceWorker extends Actor {
           println(s"----Outdated scattered data")
         } else if (s.round <= maxRound) {
           val row = s.round - round
-          scatterBlockBuf.store(s.value, row, s.srcId)
-          if(scatterBlockBuf.reachThreshold(row)) {
-            println(s"----receive ${scatterBlockBuf.count(row)} scattered data (numPeers = ${peers.size}) for round ${s.round}, start reducing")
-            val reducedData = reduce(row)
-            broadcast(reducedData, s.round)
+          scatterBlockBuf.store(s.value, row, s.srcId, s.chunkId)
+          if(scatterBlockBuf.reachThreshold(row, s.chunkId)) {
+            println(s"----receive ${scatterBlockBuf.count(row, s.chunkId)} scattered data (numPeers = ${peers.size}), chunkId =${s.chunkId} for round ${s.round}, start reducing")
+            val reducedData = reduce(row, s.chunkId)
+            broadcast(reducedData, s.chunkId, s.round)
           }
         } else {
           self ! StartAllreduce(s.round)
@@ -116,23 +129,22 @@ class AllreduceWorker extends Actor {
         }
       }
 
-    case r : ReduceBlock =>
-      assert(r.value.size <= maxBlockSize, s"Reduced block of size ${r.value.size} is larger than expected.. Max block size is $maxBlockSize")
-      println(s"----receive reduced data from round ${r.round}: value = ${r.value.toList}, srcId = ${r.srcId}, destId = ${r.destId}")
+    case r: ReduceBlock =>
+      println(s"----receive reduced data from round ${r.round}: value = ${r.value.toList}, srcId = ${r.srcId}, destId = ${r.destId}, chunkId=${r.chunkId}")
       if (id == -1) {
-        println(s"----I am not initialized yet!!!")
+        println(s"----Have not initialized!")
         self ! r
       } else {
+        assert(r.value.size <= maxChunkSize, s"Reduced block of size ${r.value.size} is larger than expected.. Max msg size is $maxChunkSize")
         assert(r.destId == id)
         if (r.round < round || completed.contains(r.round)) {
           println(s"----Outdated reduced data")
         } else if (r.round <= maxRound) {
           val row = r.round - round
-          reduceBlockBuf.store(r.value, row, r.srcId)
-          if (reduceBlockBuf.reachThreshold(row)) {
-            println(s"----receive ${reduceBlockBuf.count(row)} reduced data (numPeers = ${peers.size}) for round ${r.round}, complete")
-            update(row)
-            complete(r.round)
+          reduceBlockBuf.store(r.value, row, r.srcId, r.chunkId)
+          if (reduceBlockBuf.reachRoundThreshold(row)) {
+            println(s"----receive enough reduced data (numPeers = ${peers.size} for round ${r.round}, complete")
+            complete(r.round, row)
           }
         } else {
           self ! StartAllreduce(r.round)
@@ -143,7 +155,7 @@ class AllreduceWorker extends Actor {
 
     case Terminated(a) =>
       for ((idx, worker) <- peers) {
-        if(worker == a) {
+        if (worker == a) {
           peers -= idx
         }
       }
@@ -156,23 +168,45 @@ class AllreduceWorker extends Actor {
   }
 
   private def initArray(size: Int) = {
-    Array.fill[Double](size)(0)
+    Array.fill[Float](size)(0)
   }
 
-  private def fetch(round : Int) = {
+  private def fetch(round: Int) = {
     println(s"fetch ${round}")
-    data = Array.empty
-    for (i <- 0 until dataSize) {
-      data :+= i.toDouble + round
-      println(s"----data[$i] = ${data(i)}")
+    val input = dataSource(AllReduceInputRequest(round))
+    if (dataSize != input.data.size) {
+      throw new IllegalArgumentException(s"Input data size ${input.data.size} is different from initialization time $dataSize!")
     }
+    data = input.data
+  }
+
+  private def flush(completedRound: Int, row: Int) = {
+
+    val output: Array[Array[Float]] = reduceBlockBuf.get(row)
+    val dataOutput = Array.fill[Float](data.size)(0.0f)
+    var transferred = 0
+    for (chunk <-  output) {
+      val chunkSize = Math.min(data.size - transferred, chunk.size)
+      System.arraycopy(chunk, 0, dataOutput, transferred, chunkSize)
+      transferred += chunkSize
+    }
+    dataSink(AllReduceOutput(dataOutput, Array(0), completedRound))
   }
 
   private def scatter() = {
     for ((idx, worker) <- peers) {
       val dataBlock = getDataBlock(idx)
-      println(s"----send msg ${dataBlock.toList} from ${id} to ${idx}")
-      worker ! ScatterBlock(dataBlock, id, idx, maxScattered + 1)
+     
+      //Partition the dataBlock if it is too big
+      for (i <- 0 until myNumChunks) {
+        val chunkStart = math.min(i * maxChunkSize, dataBlock.length - 1);
+        val chunkEnd = math.min((i + 1) * maxChunkSize - 1, dataBlock.length - 1);
+        val chunk = new Array[Float](chunkEnd - chunkStart + 1);
+        System.arraycopy(dataBlock, chunkStart, chunk, 0, chunk.length);
+        //debug
+        //println(s"----send msg ${chunk.toList} from ${id} to ${idx}, chunkId: ${i}")
+        worker ! ScatterBlock(chunk, id, idx, i, maxScattered + 1);
+      }
     }
   }
 
@@ -181,43 +215,49 @@ class AllreduceWorker extends Actor {
     Array.range(0, dataSize, stepSize)
   }
 
-  private def getDataBlock(idx: Int): Array[Double] = {
+  private def getDataBlock(idx: Int): Array[Float] = {
     val (start, end) = range(idx)
-    val block = new Array[Double](end - start)
+    val block = new Array[Float](end - start)
     System.arraycopy(data, start, block, 0, end - start)
     block
   }
 
   private def range(idx: Int): (Int, Int) = {
-    if (idx >= peers.size - 1) (dataRange(idx), data.size) else (dataRange(idx), dataRange(idx + 1))
+    if (idx >= peers.size - 1)
+      (dataRange(idx), data.size)
+    else
+      (dataRange(idx), dataRange(idx + 1))
   }
 
-  private def broadcast(data: Array[Double], bcastRound: Int) = {
+  private def broadcast(data: Array[Float], chunkId: Int, bcastRound: Int) = {
     println(s"----start broadcasting")
     for ((idx, worker) <- peers) {
-      worker ! ReduceBlock(data, id, idx, bcastRound)
+        println(s"----Broadcast data:${data.toList}, src: ${id}, dest: ${idx}, chunkId: ${chunkId}, round: ${bcastRound}")
+        worker ! ReduceBlock(data, id, idx, chunkId, bcastRound);
     }
   }
 
-  private def reduce(row : Int) : Array[Double] = {
+  private def reduce(row : Int, chunkId: Int) : Array[Float] = {
     println(s"----start reducing")
-    val unreduced = scatterBlockBuf.get(row)
-    val reduced = initArray(myBlockSize)
-
+    val (unreduced, unreducedChunkSize) = scatterBlockBuf.get(row, chunkId)
+    val reduced = initArray(unreducedChunkSize)
     for (i <- 0 until scatterBlockBuf.peerSize) {
-      for (j <- 0 until myBlockSize) {
+      for (j <- 0 until unreducedChunkSize) {
         reduced(j) += unreduced(i)(j)
       }
     }
     return reduced
   }
 
-  private def update(row : Int) = {
+  private def update(row: Int) = {
     println(s"----update round ${round + row}")
   }
 
-  private def complete(completedRound : Int) = {
+  private def complete(completedRound: Int, row: Int) = {
     println(s"----complete allreduce round ${completedRound}\n")
+
+    flush(completedRound, row)
+
     data = Array.empty
     master.orNull ! CompleteAllreduce(id, completedRound)
     completed = completed + completedRound
@@ -230,8 +270,7 @@ class AllreduceWorker extends Actor {
     }
   }
 
-
-  private def printBuffer(buf : Array[Array[Double]]) = {
+  private def printBuffer(buf: Array[Array[Float]]) = {
     for (r <- 0 until buf.size) {
       print("----")
       for (c <- 0 until buf(r).size) {
@@ -250,18 +289,7 @@ object AllreduceWorker {
       withFallback(ConfigFactory.load())
 
     val system = ActorSystem("ClusterSystem", config)
-    val worker = system.actorOf(Props[AllreduceWorker], name = "worker") //?
+    val worker = system.actorOf(Props[AllreduceWorker], name = "worker")
 
-    //?
-    // system.scheduler.schedule(2.seconds, 2.seconds) {
-    //   implicit val timeout = Timeout(5 seconds)
-    //   worker ? GreetGroups() onSuccess {
-    //     case s => println(s)
-    //   }
-    // }
   }
-
-  // def startUp() = {
-  //   main(Array())
-  // }
 }

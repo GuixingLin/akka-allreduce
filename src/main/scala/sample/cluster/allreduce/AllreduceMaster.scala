@@ -14,12 +14,13 @@ import scala.language.postfixOps
 
 class AllreduceMaster(
   totalWorkers : Int,
-  thAllreduce : Double,
-  thReduce : Double, 
-  thComplete : Double,
+  thAllreduce : Float,
+  thReduce : Float, 
+  thComplete : Float,
   maxLag : Int,
   dataSize: Int,
-  maxRound: Int
+  maxRound: Int,
+  maxChunkSize: Int
 ) extends Actor {
 
   var workers = Map[Int, ActorRef]()
@@ -38,14 +39,13 @@ class AllreduceMaster(
       println(s"----detect member ${m.address} up")
       register(m).onSuccess {
         case Done =>
-          if (workers.size >= totalWorkers * thAllreduce) {
+          if (workers.size >= (totalWorkers * thAllreduce).toInt) {
             println(s"----${workers.size} (out of ${totalWorkers}) workers are up")
             init_workers()
             round = 0
             startAllreduce()
           }
       }
-      // println(s"----current size = ${workers.size}???") //? why this msg comes before println in register?
 
     case Terminated(a) =>
       println(s"$a is terminated, removing it from the set")
@@ -84,7 +84,7 @@ class AllreduceMaster(
     private def init_workers() = {
       for ((idx, worker) <- workers) {
         println(s"----init worker $idx $worker")
-        worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize=workers.size)
+        worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       }
     }
 
@@ -101,20 +101,24 @@ class AllreduceMaster(
 object AllreduceMaster {
   def main(args: Array[String]): Unit = {
     // Override the configuration of the port when specified as program argument
-    val totalWorkers = 5
-    val thAllreduce = 0.5
-    val thReduce = 0.9
-    val thComplete = 0.8
+    val totalWorkers = 2
+    val thAllreduce = 1f
+    val thReduce = 0.9f
+    val thComplete = 0.8f
     val maxLag = 1
-    val maxRound = 1000
+    val maxRound = 100
+    val dataSize = if (args.length <= 1) totalWorkers * 5 else args(1).toInt
     val port = if (args.isEmpty) "2551" else args(0)
+    val maxChunkSize = if (args.length <= 2) 1 else args(2).toInt
+
+    //debug
+    println(s"----dataSize is :${dataSize}")
 
     val config = ConfigFactory.parseString(s"akka.remote.netty.tcp.port=$port").
       withFallback(ConfigFactory.parseString("akka.cluster.roles = [master]")).
       withFallback(ConfigFactory.load())
 
     val system = ActorSystem("ClusterSystem", config)
-    // val master = system.actorOf(Props(classOf[AllreduceMaster],layout), name = "master") //? what's second arg of props for
     val master = system.actorOf(
       Props(
         classOf[AllreduceMaster], 
@@ -123,13 +127,11 @@ object AllreduceMaster {
         thReduce, 
         thComplete, 
         maxLag,
-        maxRound
+        dataSize,
+        maxRound,
+        maxChunkSize
       ), 
       name = "master"
     )
   }
-
-  // def startUp(ports: List[String] = List("2551")): Unit = {
-  //   ports foreach( eachPort => main(Array(eachPort)))
-  // }
 }
