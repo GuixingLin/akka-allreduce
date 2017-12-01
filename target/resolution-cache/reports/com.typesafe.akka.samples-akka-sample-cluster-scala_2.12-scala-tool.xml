@@ -4,16 +4,16 @@
 	<info
 		organisation="com.typesafe.akka.samples"
 		module="akka-sample-cluster-scala_2.12"
-		revision="9d4a7c7f+20171130-1416"
+		revision="b8d89400+20171130-1751"
 		conf="scala-tool"
 		confs="compile, runtime, test, provided, optional, multi-jvm, compile-internal, runtime-internal, test-internal, plugin, sources, docs, pom, scala-tool"
-		date="20171130141613"/>
+		date="20171130175200"/>
 	<dependencies>
 		<module organisation="org.scala-lang" name="scala-compiler">
 			<revision name="2.12.2" status="release" pubdate="20170413012020" resolver="sbt-chain" artresolver="sbt-chain" homepage="http://www.scala-lang.org/" downloaded="false" searched="false" default="false" conf="default, compile, runtime, optional, optional(default), master" position="0">
 				<license name="BSD 3-Clause" url="http://www.scala-lang.org/license.html"/>
 				<metadata-artifact status="no" details="" size="3089" time="0" location="/Users/drtailor/.ivy2/cache/org.scala-lang/scala-compiler/ivy-2.12.2.xml" searched="false" origin-is-local="false" origin-location="https://repo1.maven.org/maven2/org/scala-lang/scala-compiler/2.12.2/scala-compiler-2.12.2.pom"/>
-				<caller organisation="com.typesafe.akka.samples" name="akka-sample-cluster-scala_2.12" conf="scala-tool" rev="2.12.2" rev-constraint-default="2.12.2" rev-constraint-dynamic="2.12.2" callerrev="9d4a7c7f+20171130-1416"/>
+				<caller organisation="com.typesafe.akka.samples" name="akka-sample-cluster-scala_2.12" conf="scala-tool" rev="2.12.2" rev-constraint-default="2.12.2" rev-constraint-dynamic="2.12.2" callerrev="b8d89400+20171130-1751"/>
 				<artifacts>
 					<artifact name="scala-compiler" type="jar" ext="jar" status="no" details="" size="9645748" time="0" location="/Users/drtailor/.ivy2/cache/org.scala-lang/scala-compiler/jars/scala-compiler-2.12.2.jar">
 						<origin-location is-local="false" location="https://repo1.maven.org/maven2/org/scala-lang/scala-compiler/2.12.2/scala-compiler-2.12.2.jar"/>
@@ -62,9 +62,9 @@
 				<license name="BSD 3-Clause" url="http://www.scala-lang.org/license.html"/>
 				<metadata-artifact status="no" details="" size="2653" time="0" location="/Users/drtailor/.ivy2/cache/org.scala-lang/scala-library/ivy-2.12.2.xml" searched="false" origin-is-local="false" origin-location="https://repo1.maven.org/maven2/org/scala-lang/scala-library/2.12.2/scala-library-2.12.2.pom"/>
 				<caller organisation="org.scala-lang" name="scala-reflect" conf="compile, runtime" rev="2.12.2" rev-constraint-default="2.12.2" rev-constraint-dynamic="2.12.2" callerrev="2.12.2"/>
-				<caller organisation="com.typesafe.akka.samples" name="akka-sample-cluster-scala_2.12" conf="scala-tool" rev="2.12.2" rev-constraint-default="2.12.2" rev-constraint-dynamic="2.12.2" callerrev="9d4a7c7f+20171130-1416"/>
 				<caller organisation="org.scala-lang" name="scala-compiler" conf="default, compile, runtime, optional, master" rev="2.12.2" rev-constraint-default="2.12.2" rev-constraint-dynamic="2.12.2" callerrev="2.12.2"/>
 				<caller organisation="org.scala-lang.modules" name="scala-xml_2.12" conf="compile, runtime" rev="2.12.2" rev-constraint-default="2.12.2" rev-constraint-dynamic="2.12.2" callerrev="1.0.6"/>
+				<caller organisation="com.typesafe.akka.samples" name="akka-sample-cluster-scala_2.12" conf="scala-tool" rev="2.12.2" rev-constraint-default="2.12.2" rev-constraint-dynamic="2.12.2" callerrev="b8d89400+20171130-1751"/>
 				<artifacts>
 					<artifact name="scala-library" type="jar" ext="jar" status="no" details="" size="5278660" time="0" location="/Users/drtailor/.ivy2/cache/org.scala-lang/scala-library/jars/scala-library-2.12.2.jar">
 						<origin-location is-local="false" location="https://repo1.maven.org/maven2/org/scala-lang/scala-library/2.12.2/scala-library-2.12.2.jar"/>

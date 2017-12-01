@@ -4,16 +4,16 @@
 	<info
 		organisation="com.typesafe.akka.samples"
 		module="akka-sample-cluster-scala_2.12"
-		revision="9d4a7c7f+20171130-1416"
+		revision="b8d89400+20171130-1751"
 		conf="runtime-internal"
 		confs="compile, runtime, test, provided, optional, multi-jvm, compile-internal, runtime-internal, test-internal, plugin, sources, docs, pom, scala-tool"
-		date="20171130141613"/>
+		date="20171130175200"/>
 	<dependencies>
 		<module organisation="com.typesafe.akka" name="akka-multi-node-testkit_2.12">
 			<revision name="2.5.4" status="release" pubdate="20170810062459" resolver="sbt-chain" artresolver="sbt-chain" homepage="http://akka.io/" downloaded="false" searched="false" default="false" conf="default, compile, runtime, default(compile), master" position="18">
 				<license name="Apache License, Version 2.0" url="http://www.apache.org/licenses/LICENSE-2.0"/>
 				<metadata-artifact status="no" details="" size="3477" time="0" location="/Users/drtailor/.ivy2/cache/com.typesafe.akka/akka-multi-node-testkit_2.12/ivy-2.5.4.xml" searched="false" origin-is-local="false" origin-location="https://repo1.maven.org/maven2/com/typesafe/akka/akka-multi-node-testkit_2.12/2.5.4/akka-multi-node-testkit_2.12-2.5.4.pom"/>
-				<caller organisation="com.typesafe.akka.samples" name="akka-sample-cluster-scala_2.12" conf="compile, runtime-internal, runtime, optional" rev="2.5.4" rev-constraint-default="2.5.4" rev-constraint-dynamic="2.5.4" callerrev="9d4a7c7f+20171130-1416"/>
+				<caller organisation="com.typesafe.akka.samples" name="akka-sample-cluster-scala_2.12" conf="compile, runtime-internal, runtime, optional" rev="2.5.4" rev-constraint-default="2.5.4" rev-constraint-dynamic="2.5.4" callerrev="b8d89400+20171130-1751"/>
 				<artifacts>
 					<artifact name="akka-multi-node-testkit_2.12" type="jar" ext="jar" status="no" details="" size="385217" time="0" location="/Users/drtailor/.ivy2/cache/com.typesafe.akka/akka-multi-node-testkit_2.12/jars/akka-multi-node-testkit_2.12-2.5.4.jar">
 						<origin-location is-local="false" location="https://repo1.maven.org/maven2/com/typesafe/akka/akka-multi-node-testkit_2.12/2.5.4/akka-multi-node-testkit_2.12-2.5.4.jar"/>
@@ -25,7 +25,7 @@
 			<revision name="2.5.4" status="release" pubdate="20170810062702" resolver="sbt-chain" artresolver="sbt-chain" homepage="http://akka.io/" downloaded="false" searched="false" default="false" conf="default, compile, runtime, default(compile), master" position="17">
 				<license name="Apache License, Version 2.0" url="http://www.apache.org/licenses/LICENSE-2.0"/>
 				<metadata-artifact status="no" details="" size="3060" time="0" location="/Users/drtailor/.ivy2/cache/com.typesafe.akka/akka-cluster-tools_2.12/ivy-2.5.4.xml" searched="false" origin-is-local="false" origin-location="https://repo1.maven.org/maven2/com/typesafe/akka/akka-cluster-tools_2.12/2.5.4/akka-cluster-tools_2.12-2.5.4.pom"/>
-				<caller organisation="com.typesafe.akka.samples" name="akka-sample-cluster-scala_2.12" conf="compile, runtime-internal, runtime, optional" rev="2.5.4" rev-constraint-default="2.5.4" rev-constraint-dynamic="2.5.4" callerrev="9d4a7c7f+20171130-1416"/>
+				<caller organisation="com.typesafe.akka.samples" name="akka-sample-cluster-scala_2.12" conf="compile, runtime-internal, runtime, optional" rev="2.5.4" rev-constraint-default="2.5.4" rev-constraint-dynamic="2.5.4" callerrev="b8d89400+20171130-1751"/>
 				<artifacts>
 					<artifact name="akka-cluster-tools_2.12" type="jar" ext="jar" status="no" details="" size="583116" time="0" location="/Users/drtailor/.ivy2/cache/com.typesafe.akka/akka-cluster-tools_2.12/jars/akka-cluster-tools_2.12-2.5.4.jar">
 						<origin-location is-local="false" location="https://repo1.maven.org/maven2/com/typesafe/akka/akka-cluster-tools_2.12/2.5.4/akka-cluster-tools_2.12-2.5.4.jar"/>
@@ -37,7 +37,7 @@
 			<revision name="2.5.4" status="release" pubdate="20170810062652" resolver="sbt-chain" artresolver="sbt-chain" homepage="http://akka.io/" downloaded="false" searched="false" default="false" conf="default, compile, runtime, default(compile), master" position="16">
 				<license name="Apache License, Version 2.0" url="http://www.apache.org/licenses/LICENSE-2.0"/>
 				<metadata-artifact status="no" details="" size="3574" time="0" location="/Users/drtailor/.ivy2/cache/com.typesafe.akka/akka-cluster-metrics_2.12/ivy-2.5.4.xml" searched="false" origin-is-local="false" origin-location="https://repo1.maven.org/maven2/com/typesafe/akka/akka-cluster-metrics_2.12/2.5.4/akka-cluster-metrics_2.12-2.5.4.pom"/>
-				<caller organisation="com.typesafe.akka.samples" name="akka-sample-cluster-scala_2.12" conf="compile, runtime-internal, runtime, optional" rev="2.5.4" rev-constraint-default="2.5.4" rev-constraint-dynamic="2.5.4" callerrev="9d4a7c7f+20171130-1416"/>
+				<caller organisation="com.typesafe.akka.samples" name="akka-sample-cluster-scala_2.12" conf="compile, runtime-internal, runtime, optional" rev="2.5.4" rev-constraint-default="2.5.4" rev-constraint-dynamic="2.5.4" callerrev="b8d89400+20171130-1751"/>
 				<artifacts>
 					<artifact name="akka-cluster-metrics_2.12" type="jar" ext="jar" status="no" details="" size="304279" time="0" location="/Users/drtailor/.ivy2/cache/com.typesafe.akka/akka-cluster-metrics_2.12/jars/akka-cluster-metrics_2.12-2.5.4.jar">
 						<origin-location is-local="false" location="https://repo1.maven.org/maven2/com/typesafe/akka/akka-cluster-metrics_2.12/2.5.4/akka-cluster-metrics_2.12-2.5.4.jar"/>
@@ -49,7 +49,7 @@
 			<revision name="1.6.6-rev002" status="release" pubdate="20150812084324" resolver="sbt-chain" artresolver="sbt-chain" homepage="http://kamon.io" downloaded="false" searched="false" default="false" conf="default, compile, runtime, default(compile), master" position="19">
 				<license name="Apache 2" url="http://www.apache.org/licenses/LICENSE-2.0.txt"/>
 				<metadata-artifact status="no" details="" size="3485" time="0" location="/Users/drtailor/.ivy2/cache/io.kamon/sigar-loader/ivy-1.6.6-rev002.xml" searched="false" origin-is-local="false" origin-location="https://repo1.maven.org/maven2/io/kamon/sigar-loader/1.6.6-rev002/sigar-loader-1.6.6-rev002.pom"/>
-				<caller organisation="com.typesafe.akka.samples" name="akka-sample-cluster-scala_2.12" conf="compile, runtime-internal, runtime, optional" rev="1.6.6-rev002" rev-constraint-default="1.6.6-rev002" rev-constraint-dynamic="1.6.6-rev002" callerrev="9d4a7c7f+20171130-1416"/>
+				<caller organisation="com.typesafe.akka.samples" name="akka-sample-cluster-scala_2.12" conf="compile, runtime-internal, runtime, optional" rev="1.6.6-rev002" rev-constraint-default="1.6.6-rev002" rev-constraint-dynamic="1.6.6-rev002" callerrev="b8d89400+20171130-1751"/>
 				<artifacts>
 					<artifact name="sigar-loader" type="jar" ext="jar" status="no" details="" size="2889817" time="0" location="/Users/drtailor/.ivy2/cache/io.kamon/sigar-loader/jars/sigar-loader-1.6.6-rev002.jar">
 						<origin-location is-local="false" location="https://repo1.maven.org/maven2/io/kamon/sigar-loader/1.6.6-rev002/sigar-loader-1.6.6-rev002.jar"/>
@@ -61,9 +61,9 @@
 			<revision name="2.5.4" status="release" pubdate="20170810062614" resolver="sbt-chain" artresolver="sbt-chain" homepage="http://akka.io/" downloaded="false" searched="false" default="false" conf="default, compile, runtime(*), master(compile), runtime, default(compile), compile(*), master" position="15">
 				<license name="Apache License, Version 2.0" url="http://www.apache.org/licenses/LICENSE-2.0"/>
 				<metadata-artifact status="no" details="" size="3306" time="0" location="/Users/drtailor/.ivy2/cache/com.typesafe.akka/akka-cluster_2.12/ivy-2.5.4.xml" searched="false" origin-is-local="false" origin-location="https://repo1.maven.org/maven2/com/typesafe/akka/akka-cluster_2.12/2.5.4/akka-cluster_2.12-2.5.4.pom"/>
-				<caller organisation="com.typesafe.akka.samples" name="akka-sample-cluster-scala_2.12" conf="compile, runtime-internal, runtime, optional" rev="2.5.4" rev-constraint-default="2.5.4" rev-constraint-dynamic="2.5.4" callerrev="9d4a7c7f+20171130-1416"/>
 				<caller organisation="com.typesafe.akka" name="akka-cluster-metrics_2.12" conf="default, compile, runtime, master" rev="2.5.4" rev-constraint-default="2.5.4" rev-constraint-dynamic="2.5.4" callerrev="2.5.4"/>
 				<caller organisation="com.typesafe.akka" name="akka-cluster-tools_2.12" conf="default, compile, runtime, master" rev="2.5.4" rev-constraint-default="2.5.4" rev-constraint-dynamic="2.5.4" callerrev="2.5.4"/>
+				<caller organisation="com.typesafe.akka.samples" name="akka-sample-cluster-scala_2.12" conf="compile, runtime-internal, runtime, optional" rev="2.5.4" rev-constraint-default="2.5.4" rev-constraint-dynamic="2.5.4" callerrev="b8d89400+20171130-1751"/>
 				<artifacts>
 					<artifact name="akka-cluster_2.12" type="jar" ext="jar" status="no" details="" size="760363" time="0" location="/Users/drtailor/.ivy2/cache/com.typesafe.akka/akka-cluster_2.12/jars/akka-cluster_2.12-2.5.4.jar">
 						<origin-location is-local="false" location="https://repo1.maven.org/maven2/com/typesafe/akka/akka-cluster_2.12/2.5.4/akka-cluster_2.12-2.5.4.jar"/>
@@ -75,9 +75,9 @@
 			<revision name="2.5.4" status="release" pubdate="20170810062336" resolver="sbt-chain" artresolver="sbt-chain" homepage="http://akka.io/" downloaded="false" searched="false" default="false" conf="default, compile, runtime(*), master(compile), runtime, default(compile), compile(*), master" position="5">
 				<license name="Apache License, Version 2.0" url="http://www.apache.org/licenses/LICENSE-2.0"/>
 				<metadata-artifact status="no" details="" size="4276" time="0" location="/Users/drtailor/.ivy2/cache/com.typesafe.akka/akka-remote_2.12/ivy-2.5.4.xml" searched="false" origin-is-local="false" origin-location="https://repo1.maven.org/maven2/com/typesafe/akka/akka-remote_2.12/2.5.4/akka-remote_2.12-2.5.4.pom"/>
-				<caller organisation="com.typesafe.akka.samples" name="akka-sample-cluster-scala_2.12" conf="compile, runtime-internal, runtime, optional" rev="2.5.4" rev-constraint-default="2.5.4" rev-constraint-dynamic="2.5.4" callerrev="9d4a7c7f+20171130-1416"/>
 				<caller organisation="com.typesafe.akka" name="akka-cluster_2.12" conf="default, compile, runtime, master" rev="2.5.4" rev-constraint-default="2.5.4" rev-constraint-dynamic="2.5.4" callerrev="2.5.4"/>
 				<caller organisation="com.typesafe.akka" name="akka-multi-node-testkit_2.12" conf="default, compile, runtime, master" rev="2.5.4" rev-constraint-default="2.5.4" rev-constraint-dynamic="2.5.4" callerrev="2.5.4"/>
+				<caller organisation="com.typesafe.akka.samples" name="akka-sample-cluster-scala_2.12" conf="compile, runtime-internal, runtime, optional" rev="2.5.4" rev-constraint-default="2.5.4" rev-constraint-dynamic="2.5.4" callerrev="b8d89400+20171130-1751"/>
 				<artifacts>
 					<artifact name="akka-remote_2.12" type="jar" ext="jar" status="no" details="" size="2258074" time="0" location="/Users/drtailor/.ivy2/cache/com.typesafe.akka/akka-remote_2.12/jars/akka-remote_2.12-2.5.4.jar">
 						<origin-location is-local="false" location="https://repo1.maven.org/maven2/com/typesafe/akka/akka-remote_2.12/2.5.4/akka-remote_2.12-2.5.4.jar"/>
@@ -198,8 +198,8 @@
 			<revision name="2.5.4" status="release" pubdate="20170810062135" resolver="sbt-chain" artresolver="sbt-chain" homepage="http://akka.io/" downloaded="false" searched="false" default="false" conf="default, compile, runtime(*), master(compile), runtime, default(compile), compile(*), master" position="4">
 				<license name="Apache License, Version 2.0" url="http://www.apache.org/licenses/LICENSE-2.0"/>
 				<metadata-artifact status="no" details="" size="3543" time="0" location="/Users/drtailor/.ivy2/cache/com.typesafe.akka/akka-testkit_2.12/ivy-2.5.4.xml" searched="false" origin-is-local="false" origin-location="https://repo1.maven.org/maven2/com/typesafe/akka/akka-testkit_2.12/2.5.4/akka-testkit_2.12-2.5.4.pom"/>
-				<caller organisation="com.typesafe.akka.samples" name="akka-sample-cluster-scala_2.12" conf="compile, runtime-internal, runtime, optional" rev="2.5.4" rev-constraint-default="2.5.4" rev-constraint-dynamic="2.5.4" callerrev="9d4a7c7f+20171130-1416"/>
 				<caller organisation="com.typesafe.akka" name="akka-multi-node-testkit_2.12" conf="default, compile, runtime, master" rev="2.5.4" rev-constraint-default="2.5.4" rev-constraint-dynamic="2.5.4" callerrev="2.5.4"/>
+				<caller organisation="com.typesafe.akka.samples" name="akka-sample-cluster-scala_2.12" conf="compile, runtime-internal, runtime, optional" rev="2.5.4" rev-constraint-default="2.5.4" rev-constraint-dynamic="2.5.4" callerrev="b8d89400+20171130-1751"/>
 				<artifacts>
 					<artifact name="akka-testkit_2.12" type="jar" ext="jar" status="no" details="" size="246608" time="0" location="/Users/drtailor/.ivy2/cache/com.typesafe.akka/akka-testkit_2.12/jars/akka-testkit_2.12-2.5.4.jar">
 						<origin-location is-local="false" location="https://repo1.maven.org/maven2/com/typesafe/akka/akka-testkit_2.12/2.5.4/akka-testkit_2.12-2.5.4.jar"/>
@@ -211,9 +211,9 @@
 			<revision name="2.5.4" status="release" pubdate="20170810061700" resolver="sbt-chain" artresolver="sbt-chain" homepage="http://akka.io/" downloaded="false" searched="false" default="false" conf="default, compile, runtime(*), master(compile), runtime, default(compile), compile(*), master" position="1">
 				<license name="Apache License, Version 2.0" url="http://www.apache.org/licenses/LICENSE-2.0"/>
 				<metadata-artifact status="no" details="" size="2956" time="0" location="/Users/drtailor/.ivy2/cache/com.typesafe.akka/akka-actor_2.12/ivy-2.5.4.xml" searched="false" origin-is-local="false" origin-location="https://repo1.maven.org/maven2/com/typesafe/akka/akka-actor_2.12/2.5.4/akka-actor_2.12-2.5.4.pom"/>
-				<caller organisation="com.typesafe.akka.samples" name="akka-sample-cluster-scala_2.12" conf="compile, runtime-internal, runtime, optional" rev="2.5.4" rev-constraint-default="2.5.4" rev-constraint-dynamic="2.5.4" callerrev="9d4a7c7f+20171130-1416"/>
 				<caller organisation="com.typesafe.akka" name="akka-stream_2.12" conf="compile, runtime" rev="2.5.4" rev-constraint-default="2.5.4" rev-constraint-dynamic="2.5.4" callerrev="2.5.4"/>
 				<caller organisation="com.typesafe.akka" name="akka-remote_2.12" conf="default, compile, runtime, master" rev="2.5.4" rev-constraint-default="2.5.4" rev-constraint-dynamic="2.5.4" callerrev="2.5.4"/>
+				<caller organisation="com.typesafe.akka.samples" name="akka-sample-cluster-scala_2.12" conf="compile, runtime-internal, runtime, optional" rev="2.5.4" rev-constraint-default="2.5.4" rev-constraint-dynamic="2.5.4" callerrev="b8d89400+20171130-1751"/>
 				<caller organisation="com.typesafe.akka" name="akka-testkit_2.12" conf="default, compile, runtime, master" rev="2.5.4" rev-constraint-default="2.5.4" rev-constraint-dynamic="2.5.4" callerrev="2.5.4"/>
 				<artifacts>
 					<artifact name="akka-actor_2.12" type="jar" ext="jar" status="no" details="" size="3177384" time="0" location="/Users/drtailor/.ivy2/cache/com.typesafe.akka/akka-actor_2.12/jars/akka-actor_2.12-2.5.4.jar">
@@ -263,9 +263,9 @@
 				<caller organisation="com.typesafe.akka" name="akka-stream_2.12" conf="compile, runtime" rev="2.12.2" rev-constraint-default="2.12.2" rev-constraint-dynamic="2.12.2" callerrev="2.5.4"/>
 				<caller organisation="com.typesafe.akka" name="akka-protobuf_2.12" conf="compile, runtime" rev="2.12.2" rev-constraint-default="2.12.2" rev-constraint-dynamic="2.12.2" callerrev="2.5.4"/>
 				<caller organisation="com.typesafe.akka" name="akka-multi-node-testkit_2.12" conf="default, compile, runtime, master" rev="2.12.2" rev-constraint-default="2.12.2" rev-constraint-dynamic="2.12.2" callerrev="2.5.4"/>
+				<caller organisation="com.typesafe.akka.samples" name="akka-sample-cluster-scala_2.12" conf="compile, runtime-internal, runtime, optional" rev="2.12.2" rev-constraint-default="2.12.2" rev-constraint-dynamic="2.12.2" callerrev="b8d89400+20171130-1751"/>
 				<caller organisation="com.typesafe.akka" name="akka-testkit_2.12" conf="default, compile, runtime, master" rev="2.12.2" rev-constraint-default="2.12.2" rev-constraint-dynamic="2.12.2" callerrev="2.5.4"/>
 				<caller organisation="org.scala-lang.modules" name="scala-parser-combinators_2.12" conf="compile, runtime" rev="2.12.2" rev-constraint-default="2.12.2" rev-constraint-dynamic="2.12.2" callerrev="1.0.4"/>
-				<caller organisation="com.typesafe.akka.samples" name="akka-sample-cluster-scala_2.12" conf="compile, runtime-internal, runtime, optional" rev="2.12.2" rev-constraint-default="2.12.2" rev-constraint-dynamic="2.12.2" callerrev="9d4a7c7f+20171130-1416"/>
 				<caller organisation="com.typesafe.akka" name="akka-cluster_2.12" conf="default, compile, runtime, master" rev="2.12.2" rev-constraint-default="2.12.2" rev-constraint-dynamic="2.12.2" callerrev="2.5.4"/>
 				<caller organisation="com.typesafe.akka" name="akka-remote_2.12" conf="default, compile, runtime, master" rev="2.12.2" rev-constraint-default="2.12.2" rev-constraint-dynamic="2.12.2" callerrev="2.5.4"/>
 				<caller organisation="com.typesafe.akka" name="akka-cluster-metrics_2.12" conf="default, compile, runtime, master" rev="2.12.2" rev-constraint-default="2.12.2" rev-constraint-dynamic="2.12.2" callerrev="2.5.4"/>

@@ -20,7 +20,7 @@ class AllreduceMaster(
   maxLag : Int,
   dataSize: Int,
   maxRound: Int,
-  maxMsgSize: Int
+  maxChunkSize: Int
 ) extends Actor {
 
   var workers = Map[Int, ActorRef]()
@@ -39,7 +39,7 @@ class AllreduceMaster(
       println(s"----detect member ${m.address} up")
       register(m).onSuccess {
         case Done =>
-          if (workers.size == (totalWorkers * thAllreduce).toInt) {
+          if (workers.size >= (totalWorkers * thAllreduce).toInt) {
             println(s"----${workers.size} (out of ${totalWorkers}) workers are up")
             init_workers()
             round = 0
@@ -84,7 +84,7 @@ class AllreduceMaster(
     private def init_workers() = {
       for ((idx, worker) <- workers) {
         println(s"----init worker $idx $worker")
-        worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxMsgSize)
+        worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       }
     }
 
@@ -109,7 +109,7 @@ object AllreduceMaster {
     val maxRound = 100
     val dataSize = if (args.length <= 1) totalWorkers * 5 else args(1).toInt
     val port = if (args.isEmpty) "2551" else args(0)
-    val maxMsgSize = if (args.length <= 2) 1 else args(2).toInt
+    val maxChunkSize = if (args.length <= 2) 1 else args(2).toInt
 
     //debug
     println(s"----dataSize is :${dataSize}")
@@ -129,7 +129,7 @@ object AllreduceMaster {
         maxLag,
         dataSize,
         maxRound,
-        maxMsgSize
+        maxChunkSize
       ), 
       name = "master"
     )

@@ -4,11 +4,13 @@ case class DataBuffer(dataSize: Int,
                       peerSize: Int,
                       maxLag: Int,
                       threshold: Float,
-                      maxMsgSize: Int) { 
+                      maxChunkSize: Int) { 
 
-  //maxMsgSize is the maximum size of the msg that is allowed on the wire
+  //maxChunkSize is the maximum size of the msg that is allowed on the wire
 
   type Buffer = Array[Array[Float]]
+
+  val numChunks =  math.ceil(1f * dataSize / maxChunkSize).toInt
 
   var temporalBuffer: Array[Buffer] = {
     Array.fill(maxLag) {
@@ -22,12 +24,13 @@ case class DataBuffer(dataSize: Int,
     }
   }
 
-  private var countFilled: Array[Int] = Array.fill(maxLag)(0)
+  private var countFilled: Array[Array[Int]] = Array.ofDim[Int](maxLag, numChunks)
 
-  private val minRequired: Int = (threshold * peerSize * math.ceil(1f * dataSize / maxMsgSize).toInt).toInt
+  private val minRequired: Int = (threshold * peerSize).toInt
+  private val minChunksRequired: Int = (threshold * peerSize * numChunks).toInt
 
-  def reachThreshold(row: Int): Boolean = {
-    countFilled(row) == minRequired
+  def reachThreshold(row: Int, chunkId: Int): Boolean = {
+    countFilled(row)(chunkId) == minRequired
   }
 
   def store(data: Array[Float], row: Int, srcId: Int, chunkId: Int, pos: Int = 0) = {
@@ -36,18 +39,25 @@ case class DataBuffer(dataSize: Int,
     //println(s"---Array length: ${array.length}; Data length: ${data.length}")
     System.arraycopy(
       data, 0,
-      array, chunkId * maxMsgSize,
+      array, chunkId * maxChunkSize,
       data.size)
 
-    countFilled(row) += 1
+    countFilled(row)(chunkId) += 1
   }
 
-  def count(row: Int): Int = {
-    countFilled(row)
+  def count(row: Int, chunkId: Int): Int = {
+    countFilled(row)(chunkId)
   }
 
-  def get(row: Int): Buffer = {
-    temporalBuffer(row)
+  def get(row: Int, chunkId: Int): (Buffer, Int) = {
+    //temporalBuffer(row)
+    var endPos = math.min(dataSize, (chunkId + 1) * maxChunkSize)
+    var length = endPos - chunkId * maxChunkSize
+    var output: Array[Array[Float]] = Array.empty
+    for (i <- 0 until temporalBuffer(row).length){
+      output :+= temporalBuffer(row)(i).slice(chunkId * maxChunkSize, endPos)
+    }
+    (output, length)
   }
 
   def up(): Unit = {
@@ -56,7 +66,17 @@ case class DataBuffer(dataSize: Int,
       countFilled(i - 1) = countFilled(i)
     }
     temporalBuffer(maxLag - 1) = initializePeerBuffer()
-    countFilled(maxLag - 1) = 0
+    countFilled(maxLag - 1) = Array.fill(numChunks)(0);
+  }
+
+  def reachRoundThreshold(row: Int) : Boolean = {
+    var chunksCompleteReduce = 0
+    for (i <- 0 until countFilled(row).length){
+        chunksCompleteReduce += countFilled(row)(i);
+    }
+    //debug
+    //println(s"-----Have gathered ${chunksCompleteReduce} reduced chunks from peers")
+    chunksCompleteReduce == minChunksRequired
   }
 
 }
