@@ -284,12 +284,32 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
 object AllreduceWorker {
   def main(args: Array[String]): Unit = {
     val port = if (args.isEmpty) "2553" else args(0)
+
+
     val config = ConfigFactory.parseString(s"akka.remote.netty.tcp.port=$port").
       withFallback(ConfigFactory.parseString("akka.cluster.roles = [worker]")).
       withFallback(ConfigFactory.load())
 
     val system = ActorSystem("ClusterSystem", config)
-    val worker = system.actorOf(Props[AllreduceWorker], name = "worker")
+
+    type DataSink = AllReduceOutput => Unit
+    type DataSource = AllReduceInputRequest => AllReduceInput
+
+    def createDataSource(size: Int) : DataSource = {
+      req => {
+        val floats = Array.range(0, size).map(_ + req.iteration.toFloat)
+        println(s"Data source at #${req.iteration}: ${floats.toList}")
+        AllReduceInput(floats)
+      }
+    }
+
+    val dataSize = 10
+    val source: DataSource = createDataSource(dataSize)
+    val sink: DataSink = r => {
+      println(s"Data output at #${r.iteration}: ${r.data.toList}")
+    }
+
+    val worker = system.actorOf(Props(classOf[AllreduceWorker], source, sink), name = "worker")
 
   }
 }
