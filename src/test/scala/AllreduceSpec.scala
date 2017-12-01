@@ -15,18 +15,76 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
   type DataSource = AllReduceInputRequest => AllReduceInput
 
   //basic setup
-
-  val source: DataSource = createDataSource(8)
+  val source: DataSource = createBasicDataSource(8)
   val sink: DataSink = r => {
     println(s"Data output at #${r.iteration}: ${r.data.toList}")
   }
 
-  def createDataSource(size: Int) : DataSource = {
+  def createBasicDataSource(size: Int): DataSource = {
+    createCustomDataSource(size) {
+      (idx: Int, iter: Int) => idx + iter.toFloat
+    }
+  }
+
+  def createCustomDataSource(size: Int)(arrIdxAndIterToData: (Int, Int) => Float): DataSource = {
     req => {
-      val floats = Array.range(0, size).map(_ + req.iteration.toFloat)
+      val floats = Array.range(0, size).map(arrIdxAndIterToData(_, req.iteration))
       println(s"Data source at #${req.iteration}: ${floats.toList}")
       AllReduceInput(floats)
     }
+  }
+
+  def assertiveDataSink(expected: List[List[Float]], iterations: List[Int]): DataSink = {
+    r => {
+      val pos = iterations.indexOf(r.iteration)
+      pos should be >= 0
+      r.data.toList shouldBe expected(pos)
+    }
+  }
+
+  "Flushed output of all reduce" must {
+
+    val idx = 1
+    val thReduce = 1f
+    val thComplete = 1f
+    val maxLag = 5
+    val dataSize = 3
+    val maxMsgSize = 2
+    val numActors = 2
+
+    val generator = (idx: Int, iter: Int) => idx + iter.toFloat
+
+    "sum up all correct data" in {
+
+      val source = createCustomDataSource(dataSize)(generator)
+
+      val output1 = Array.range(0, dataSize).map(generator(_, 0)).map(_ * numActors).toList
+      val output2 = Array.range(0, dataSize).map(generator(_, 1)).map(_ * numActors).toList
+      val sink = assertiveDataSink(List(output1, output2), List(0, 1))
+
+
+      val worker = createNewWorker(source, sink)
+
+      // Replace test actor with the worker itself, it can actually send message to self - not intercepted by testactor
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(numActors).updated(idx, worker)
+
+      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxMsgSize)
+
+      worker ! StartAllreduce(0)
+      worker ! ScatterBlock(Array(2f), srcId = 0, destId = 1, chunkId = 0, 0)
+      worker ! ReduceBlock(Array(0f, 2f), srcId = 0, destId = 1, chunkId =0, 0)
+
+      worker ! StartAllreduce(1)
+      worker ! ScatterBlock(Array(3f), srcId = 0, destId = 1, chunkId = 0, 1)
+      worker ! ReduceBlock(Array(2f, 4f), srcId = 0, destId = 1, chunkId =0, 1)
+
+      fishForMessage() {
+        case CompleteAllreduce(1, 0) => true
+        case _ => false
+      }
+      expectMsg(CompleteAllreduce(1, 1))
+    }
+
   }
 
   "Early receiving reduce" must {
@@ -118,7 +176,7 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
     "single-round allreduce with nasty chunk size" in {
 
       val dataSize = 6
-      val worker = createNewWorker(createDataSource(dataSize), sink)
+      val worker = createNewWorker(createBasicDataSource(dataSize), sink)
       val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(2)
       val idx = 0
       val thReduce = 0.9f
@@ -163,7 +221,7 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
 
     "single-round allreduce with nasty chunk size contd" in {
       val dataSize = 9
-      val worker = createNewWorker(createDataSource(dataSize), sink)
+      val worker = createNewWorker(createBasicDataSource(dataSize), sink)
       val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(3)
       val idx = 0
       val thReduce = 0.7f
@@ -305,7 +363,7 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       val maxLag = 5
       val dataSize = 4
       val maxChunkSize = 2
-      val worker = createNewWorker(createDataSource(dataSize), sink)
+      val worker = createNewWorker(createBasicDataSource(dataSize), sink)
 
       worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       println("===============start outdated scatter test!==============")
@@ -341,7 +399,7 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       val maxLag = 5
       val dataSize = 4
       val maxChunkSize = 2
-      val worker = createNewWorker(createDataSource(dataSize), sink)
+      val worker = createNewWorker(createBasicDataSource(dataSize), sink)
       worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       println("===============start missing test!==============")
       worker ! StartAllreduce(0)
@@ -394,7 +452,7 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       val dataSize = 4
       val maxChunkSize = 100
       val maxLag = 5
-      val worker = createNewWorker(createDataSource(dataSize), sink)
+      val worker = createNewWorker(createBasicDataSource(dataSize), sink)
 
       worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       println("===============start missing test!==============")
@@ -428,7 +486,7 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       val dataSize = 4
       val maxChunkSize = 100
       val maxLag = 5
-      val worker = createNewWorker(createDataSource(4), sink)
+      val worker = createNewWorker(createBasicDataSource(4), sink)
 
       worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       println("===============start delayed future reduce test!==============")
@@ -495,9 +553,9 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
         worker ! ReduceBlock(Array(12.0f, 12.0f), 3, 0, 0, i)
       }
 
-      testCatchup(worker, maxLag, catchupRound=6)
-      testCatchup(worker, maxLag, catchupRound=7)
-      testCatchup(worker, maxLag, catchupRound=8)
+      testCatchup(worker, maxLag, catchupRound = 6)
+      testCatchup(worker, maxLag, catchupRound = 7)
+      testCatchup(worker, maxLag, catchupRound = 8)
     }
 
     "cold catchup" in {
@@ -555,7 +613,7 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       val dataSize = 9
       val maxChunkSize = 2
       val maxLag = 5
-      val worker = createNewWorker(createDataSource(dataSize), sink)
+      val worker = createNewWorker(createBasicDataSource(dataSize), sink)
 
       worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       println("===============start delayed future reduce test!==============")
@@ -620,9 +678,9 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
   }
 
   private def simulateScatterBlocksFromPeers(worker: ActorRef, i: Int) = {
-    worker ! ScatterBlock(Array(1.0f*(i+1), 1.0f*(i+1)), 1, 0, 0, i)
-    worker ! ScatterBlock(Array(2.0f*(i+1), 2.0f*(i+1)), 2, 0, 0, i)
-    worker ! ScatterBlock(Array(4.0f*(i+1), 4.0f*(i+1)), 3, 0, 0, i)
+    worker ! ScatterBlock(Array(1.0f * (i + 1), 1.0f * (i + 1)), 1, 0, 0, i)
+    worker ! ScatterBlock(Array(2.0f * (i + 1), 2.0f * (i + 1)), 2, 0, 0, i)
+    worker ! ScatterBlock(Array(4.0f * (i + 1), 4.0f * (i + 1)), 3, 0, 0, i)
   }
 
   private def expectBasicSendingScatterBlock(worker: ActorRef, i: Int) = {
@@ -645,10 +703,10 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
   }
 
   private def expectBasicSendingReduceBlock(i: Int) = {
-    expectReduce(ReduceBlock(Array(7.0f*(i+1), 7.0f*(i+1)), 0, 0, 0, i))
-    expectReduce(ReduceBlock(Array(7.0f*(i+1), 7.0f*(i+1)), 0, 1, 0, i))
-    expectReduce(ReduceBlock(Array(7.0f*(i+1), 7.0f*(i+1)), 0, 2, 0, i))
-    expectReduce(ReduceBlock(Array(7.0f*(i+1), 7.0f*(i+1)), 0, 3, 0, i))
+    expectReduce(ReduceBlock(Array(7.0f * (i + 1), 7.0f * (i + 1)), 0, 0, 0, i))
+    expectReduce(ReduceBlock(Array(7.0f * (i + 1), 7.0f * (i + 1)), 0, 1, 0, i))
+    expectReduce(ReduceBlock(Array(7.0f * (i + 1), 7.0f * (i + 1)), 0, 2, 0, i))
+    expectReduce(ReduceBlock(Array(7.0f * (i + 1), 7.0f * (i + 1)), 0, 3, 0, i))
   }
 
 

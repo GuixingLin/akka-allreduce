@@ -56,6 +56,7 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
       dataRange = initDataBlockRanges()
       myBlockSize = blockSize(id)
       maxBlockSize = blockSize(0)
+
       maxChunkSize = init.maxChunkSize
       myNumChunks = math.ceil(1f * myBlockSize / maxChunkSize).toInt
       maxNumChunks = math.ceil(1f * maxBlockSize / maxChunkSize).toInt
@@ -82,7 +83,8 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
       }
       println(s"----number of peers = ${peers.size}")
       println(s"----thReduce = ${thReduce}, thComplete = ${thComplete}, maxLag = ${maxLag}")
-      println(s"----size of buffer: ${scatterBlockBuf.maxLag} x ${scatterBlockBuf.peerSize} x ${scatterBlockBuf.dataSize}")
+      println(s"----size of scatter buffer: ${scatterBlockBuf.maxLag} x ${scatterBlockBuf.peerSize} x ${scatterBlockBuf.dataSize}")
+      println(s"----size of reduce buffer: ${reduceBlockBuf.maxLag} x ${reduceBlockBuf.peerSize} x ${reduceBlockBuf.dataSize}")
 
     case s: StartAllreduce =>
       println(s"----start allreduce round ${s.round}")
@@ -183,20 +185,21 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
   private def flush(completedRound: Int, row: Int) = {
 
     val output: Array[Array[Float]] = reduceBlockBuf.get(row)
-    val dataOutput = Array.fill[Float](data.size)(0.0f)
+    val dataOutput = Array.fill[Float](dataSize)(0.0f)
     var transferred = 0
-    for (chunk <-  output) {
-      val chunkSize = Math.min(data.size - transferred, chunk.size)
+    for (chunk <- output) {
+      val chunkSize = Math.min(dataSize - transferred, chunk.size)
       System.arraycopy(chunk, 0, dataOutput, transferred, chunkSize)
       transferred += chunkSize
     }
+    println(s"----Flushing ${dataOutput.toList} at completed round $completedRound")
     dataSink(AllReduceOutput(dataOutput, Array(0), completedRound))
   }
 
   private def scatter() = {
     for ((idx, worker) <- peers) {
       val dataBlock = getDataBlock(idx)
-     
+
       //Partition the dataBlock if it is too big
       for (i <- 0 until myNumChunks) {
         val chunkStart = math.min(i * maxChunkSize, dataBlock.length - 1);
@@ -211,7 +214,7 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
   }
 
   private def initDataBlockRanges() = {
-    val stepSize = dataSize / peers.size
+    val stepSize = math.ceil(dataSize * 1f / peers.size).toInt
     Array.range(0, dataSize, stepSize)
   }
 
@@ -224,7 +227,7 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
 
   private def range(idx: Int): (Int, Int) = {
     if (idx >= peers.size - 1)
-      (dataRange(idx), data.size)
+      (dataRange(idx), dataSize)
     else
       (dataRange(idx), dataRange(idx + 1))
   }
@@ -249,10 +252,6 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
     return reduced
   }
 
-  private def update(row: Int) = {
-    println(s"----update round ${round + row}")
-  }
-
   private def complete(completedRound: Int, row: Int) = {
     println(s"----complete allreduce round ${completedRound}\n")
 
@@ -270,15 +269,6 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
     }
   }
 
-  private def printBuffer(buf: Array[Array[Float]]) = {
-    for (r <- 0 until buf.size) {
-      print("----")
-      for (c <- 0 until buf(r).size) {
-        print(s"${buf(r)(c)} ")
-      }
-      println("")
-    }
-  }
 }
 
 object AllreduceWorker {
