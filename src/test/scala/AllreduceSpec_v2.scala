@@ -447,8 +447,110 @@ class AllReduceSpec_v2() extends TestKit(ActorSystem("MySpec")) with ImplicitSen
       expectMsg(CompleteAllreduce(0, 1))
     }
 
+  }
 
+  "Catch up" must {
 
+    "simple catchup" in {
+      val worker = createNewWorker()
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
+      val idx = 0
+      val thReduce = 1
+      val thComplete = 1
+      val maxLag = 5
+      val dataSize = 8
+      val maxChunkSize = 2
+      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
+      println("===============start simple catchup test!==============")
+      for (i <- 0 until 6) {
+        worker ! StartAllreduce(i)
+        expectBasicSendingScatterBlock(worker, i)
+
+        simulateScatterBlocksFromPeers(worker, i)
+        worker ! ReduceBlock(Array(12.0f, 12.0f), 1, 0, 0, i)
+        worker ! ReduceBlock(Array(12.0f, 12.0f), 2, 0, 0, i)
+        worker ! ReduceBlock(Array(12.0f, 12.0f), 3, 0, 0, i)
+      }
+
+      testCatchup(worker, maxLag, catchupRound=6)
+      testCatchup(worker, maxLag, catchupRound=7)
+      testCatchup(worker, maxLag, catchupRound=8)
+    }
+
+    "cold catchup" in {
+      // extreme case of catch up, only for test use
+      val worker = createNewWorker()
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
+      val idx = 0
+      val thReduce = 1
+      val thComplete = 1
+      val maxLag = 5
+      val dataSize = 8
+      val maxChunkSize = 2
+      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
+      worker ! StartAllreduce(10) // trigger the problem instantly
+      // NOTE: here we need to nullify the reduce message instead.
+      for (i <- 0 until 5) {
+        expectReduce(ReduceBlock(Array(0f, 0f), 0, 0, 0, i))
+        expectReduce(ReduceBlock(Array(0f, 0f), 0, 1, 0, i))
+        expectReduce(ReduceBlock(Array(0f, 0f), 0, 2, 0, i))
+        expectReduce(ReduceBlock(Array(0f, 0f), 0, 3, 0, i))
+        expectMsg(CompleteAllreduce(0, i))
+      }
+      for (i <- 0 to 10) {
+        expectBasicSendingScatterBlock(worker, i)
+      }
+    }
+
+    "buffer when unitialized" in {
+
+      val worker = createNewWorker()
+      worker ! StartAllreduce(0)
+      expectNoMsg()
+      val idx = 0
+      val thReduce = 1
+      val thComplete = 1
+      val maxLag = 5
+      val dataSize = 8
+      val maxChunkSize = 2
+      val workers = initializeWorkersAsSelf(4)
+      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
+      expectBasicSendingScatterBlock(worker, 0)
+
+    }
+
+  }
+
+  private def simulateScatterBlocksFromPeers(worker: ActorRef, i: Int) = {
+    worker ! ScatterBlock(Array(1.0f*(i+1), 1.0f*(i+1)), 1, 0, 0, i)
+    worker ! ScatterBlock(Array(2.0f*(i+1), 2.0f*(i+1)), 2, 0, 0, i)
+    worker ! ScatterBlock(Array(4.0f*(i+1), 4.0f*(i+1)), 3, 0, 0, i)
+  }
+
+  private def expectBasicSendingScatterBlock(worker: ActorRef, i: Int) = {
+    expectScatter(ScatterBlock(Array(0f + i, 1f + i), 0, 0, 0, i))
+    expectScatter(ScatterBlock(Array(2f + i, 3f + i), 0, 1, 0, i))
+    expectScatter(ScatterBlock(Array(4f + i, 5f + i), 0, 2, 0, i))
+    expectScatter(ScatterBlock(Array(6f + i, 7f + i), 0, 3, 0, i))
+  }
+
+  private def testCatchup(worker: ActorRef, maxLag: Int, catchupRound: Int) = {
+    worker ! StartAllreduce(catchupRound) // trigger the first round to catchup
+    val completionRound = catchupRound - (maxLag + 1)
+
+    expectBasicSendingReduceBlock(completionRound)
+    expectMsg(CompleteAllreduce(0, completionRound))
+    expectScatter(ScatterBlock(Array(0f + catchupRound, 1f + catchupRound), 0, 0, 0, catchupRound))
+    expectScatter(ScatterBlock(Array(2f + catchupRound, 3f + catchupRound), 0, 1, 0, catchupRound))
+    expectScatter(ScatterBlock(Array(4f + catchupRound, 5f + catchupRound), 0, 2, 0, catchupRound))
+    expectScatter(ScatterBlock(Array(6f + catchupRound, 7f + catchupRound), 0, 3, 0, catchupRound))
+  }
+
+  private def expectBasicSendingReduceBlock(i: Int) = {
+    expectReduce(ReduceBlock(Array(7.0f*(i+1), 7.0f*(i+1)), 0, 0, 0, i))
+    expectReduce(ReduceBlock(Array(7.0f*(i+1), 7.0f*(i+1)), 0, 1, 0, i))
+    expectReduce(ReduceBlock(Array(7.0f*(i+1), 7.0f*(i+1)), 0, 2, 0, i))
+    expectReduce(ReduceBlock(Array(7.0f*(i+1), 7.0f*(i+1)), 0, 3, 0, i))
   }
 
 
