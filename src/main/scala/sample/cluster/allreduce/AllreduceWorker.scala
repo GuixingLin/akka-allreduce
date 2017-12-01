@@ -8,7 +8,8 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-class AllreduceWorker extends Actor {
+class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
+                      dataSink: AllReduceOutput => Unit) extends Actor {
 
   var id = -1 // node id
   var master: Option[ActorRef] = None
@@ -70,7 +71,7 @@ class AllreduceWorker extends Actor {
       reduceBlockBuf = DataBuffer(
         dataSize = maxBlockSize,
         peerSize = peers.size,
-        maxLag=maxLag + 1,
+        maxLag = maxLag + 1,
         threshold = thComplete,
         maxChunkSize = maxChunkSize
       )
@@ -83,7 +84,7 @@ class AllreduceWorker extends Actor {
       println(s"----thReduce = ${thReduce}, thComplete = ${thComplete}, maxLag = ${maxLag}")
       println(s"----size of buffer: ${scatterBlockBuf.maxLag} x ${scatterBlockBuf.peerSize} x ${scatterBlockBuf.dataSize}")
 
-    case s : StartAllreduce =>
+    case s: StartAllreduce =>
       println(s"----start allreduce round ${s.round}")
       if (id == -1) {
         println(s"----Have not initialized!")
@@ -105,7 +106,7 @@ class AllreduceWorker extends Actor {
         }
       }
 
-    case s : ScatterBlock =>
+    case s: ScatterBlock =>
       println(s"----receive scattered data from round ${s.round}: value = ${s.value.toList}, srcId = ${s.srcId}, destId = ${s.destId}, chunkId=${s.chunkId}, current round = $round")
       if (id == -1) {
         println(s"----Have not initialized!")
@@ -128,7 +129,7 @@ class AllreduceWorker extends Actor {
         }
       }
 
-    case r : ReduceBlock =>
+    case r: ReduceBlock =>
       println(s"----receive reduced data from round ${r.round}: value = ${r.value.toList}, srcId = ${r.srcId}, destId = ${r.destId}, chunkId=${r.chunkId}")
       if (id == -1) {
         println(s"----Have not initialized!")
@@ -154,7 +155,7 @@ class AllreduceWorker extends Actor {
 
     case Terminated(a) =>
       for ((idx, worker) <- peers) {
-        if(worker == a) {
+        if (worker == a) {
           peers -= idx
         }
       }
@@ -170,13 +171,26 @@ class AllreduceWorker extends Actor {
     Array.fill[Float](size)(0)
   }
 
-  private def fetch(round : Int) = {
+  private def fetch(round: Int) = {
     println(s"fetch ${round}")
-    data = Array.empty
-    for (i <- 0 until dataSize) {
-      data :+= i.toFloat + round
-      println(s"----data[$i] = ${data(i)}")
+    val input = dataSource(AllReduceInputRequest(round))
+    if (dataSize != input.data.size) {
+      throw new IllegalArgumentException(s"Input data size ${input.data.size} is different from initialization time $dataSize!")
     }
+    data = input.data
+  }
+
+  private def flush(completedRound: Int) = {
+
+    val output: Array[Array[Float]] = reduceBlockBuf.get(completedRound)
+    val dataOutput = Array.fill[Float](data.size)(0.0f)
+    var transferred = 0
+    for (chunk <-  output) {
+      val chunkSize = Math.min(data.size - transferred, chunk.size)
+      System.arraycopy(chunk, 0, dataOutput, transferred, chunkSize)
+      transferred += chunkSize
+    }
+    dataSink(AllReduceOutput(dataOutput, Array(0), completedRound))
   }
 
   private def scatter() = {
@@ -209,9 +223,9 @@ class AllreduceWorker extends Actor {
   }
 
   private def range(idx: Int): (Int, Int) = {
-    if (idx >= peers.size - 1) 
-      (dataRange(idx), data.size) 
-    else 
+    if (idx >= peers.size - 1)
+      (dataRange(idx), data.size)
+    else
       (dataRange(idx), dataRange(idx + 1))
   }
 
@@ -235,12 +249,15 @@ class AllreduceWorker extends Actor {
     return reduced
   }
 
-  private def update(row : Int) = {
+  private def update(row: Int) = {
     println(s"----update round ${round + row}")
   }
 
-  private def complete(completedRound : Int) = {
+  private def complete(completedRound: Int) = {
     println(s"----complete allreduce round ${completedRound}\n")
+
+    flush(completedRound)
+
     data = Array.empty
     master.orNull ! CompleteAllreduce(id, completedRound)
     completed = completed + completedRound
@@ -253,8 +270,7 @@ class AllreduceWorker extends Actor {
     }
   }
 
-
-  private def printBuffer(buf : Array[Array[Float]]) = {
+  private def printBuffer(buf: Array[Array[Float]]) = {
     for (r <- 0 until buf.size) {
       print("----")
       for (c <- 0 until buf(r).size) {
