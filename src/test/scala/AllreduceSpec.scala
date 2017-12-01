@@ -5,7 +5,7 @@ import sample.cluster.allreduce._
 
 import scala.util.Random
 
-class AllReduceSpec_v2() extends TestKit(ActorSystem("MySpec")) with ImplicitSender
+class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
   with WordSpecLike with Matchers with BeforeAndAfterAll {
   override def afterAll {
     TestKit.shutdownActorSystem(system)
