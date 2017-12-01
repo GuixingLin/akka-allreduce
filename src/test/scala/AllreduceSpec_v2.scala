@@ -544,6 +544,81 @@ class AllReduceSpec_v2() extends TestKit(ActorSystem("MySpec")) with ImplicitSen
 
   }
 
+
+  "Sanity Check" must {
+
+    "multi-round allreduce v3" in {
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(3)
+      val idx = 0
+      val thReduce = 0.75f
+      val thComplete = 0.75f
+      val dataSize = 9
+      val maxChunkSize = 2
+      val maxLag = 5
+      val worker = createNewWorker(createDataSource(dataSize), sink)
+
+      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
+      println("===============start delayed future reduce test!==============")
+      worker ! StartAllreduce(0)
+      expectScatter(ScatterBlock(Array(0f, 1f), 0, 0, 0, 0))
+      expectScatter(ScatterBlock(Array(2f), 0, 0, 1, 0))
+      expectScatter(ScatterBlock(Array(3f, 4f), 0, 1, 0, 0))
+      expectScatter(ScatterBlock(Array(5f), 0, 1, 1, 0))
+      expectScatter(ScatterBlock(Array(6f, 7f), 0, 2, 0, 0))
+      expectScatter(ScatterBlock(Array(8f), 0, 2, 1, 0))
+
+      worker ! ScatterBlock(Array(0f, 1f), 0, 0, 0, 0)
+      worker ! ScatterBlock(Array(0f, 1f), 1, 0, 0, 0)
+      worker ! ScatterBlock(Array(0f, 1f), 2, 0, 0, 0)
+      worker ! ScatterBlock(Array(2f), 0, 0, 1, 0)
+      worker ! ScatterBlock(Array(2f), 1, 0, 1, 0)
+      worker ! ScatterBlock(Array(2f), 2, 0, 1, 0)
+
+      expectReduce(ReduceBlock(Array(0f, 2f), 0, 0, 0, 0))
+      expectReduce(ReduceBlock(Array(0f, 2f), 0, 1, 0, 0))
+      expectReduce(ReduceBlock(Array(0f, 2f), 0, 2, 0, 0))
+      expectReduce(ReduceBlock(Array(4f), 0, 0, 1, 0))
+      expectReduce(ReduceBlock(Array(4f), 0, 1, 1, 0))
+      expectReduce(ReduceBlock(Array(4f), 0, 2, 1, 0))
+
+      worker ! StartAllreduce(1) // master call it to do round 1
+      worker ! ScatterBlock(Array(10f, 11f), 1, 0, 0, 1)
+      worker ! ScatterBlock(Array(12f), 1, 0, 1, 1)
+      worker ! ScatterBlock(Array(10f, 11f), 2, 0, 0, 1)
+      worker ! ScatterBlock(Array(12f), 2, 0, 1, 1)
+
+      // we send scatter value of round 1 to peers in case someone need it
+      expectScatter(ScatterBlock(Array(1f, 2f), 0, 0, 0, 1))
+      expectScatter(ScatterBlock(Array(3f), 0, 0, 1, 1))
+      expectScatter(ScatterBlock(Array(4f, 5f), 0, 1, 0, 1))
+      expectScatter(ScatterBlock(Array(6f), 0, 1, 1, 1))
+      expectScatter(ScatterBlock(Array(7f, 8f), 0, 2, 0, 1))
+      expectScatter(ScatterBlock(Array(9f), 0, 2, 1, 1))
+
+      expectReduce(ReduceBlock(Array(20f, 22f), 0, 0, 0, 1))
+      expectReduce(ReduceBlock(Array(20f, 22f), 0, 1, 0, 1))
+      expectReduce(ReduceBlock(Array(20f, 22f), 0, 2, 0, 1))
+      expectReduce(ReduceBlock(Array(24f), 0, 0, 1, 1))
+      expectReduce(ReduceBlock(Array(24f), 0, 1, 1, 1))
+      expectReduce(ReduceBlock(Array(24f), 0, 2, 1, 1))
+      println("finishing the reduce part")
+
+      // assertion: reduce t would never come after reduce t+1. (FIFO of message) otherwise would fail!
+      worker ! ReduceBlock(Array(11f, 11f), 1, 0, 0, 0)
+      worker ! ReduceBlock(Array(11f), 1, 0, 1, 1)
+      worker ! ReduceBlock(Array(11f, 11f), 1, 0, 0, 1)
+      worker ! ReduceBlock(Array(11f), 1, 0, 1, 0)
+      worker ! ReduceBlock(Array(11f, 11f), 2, 0, 0, 0)
+      worker ! ReduceBlock(Array(11f), 2, 0, 1, 1)
+      expectNoMsg()
+      worker ! ReduceBlock(Array(11f, 11f), 2, 0, 0, 1)
+      expectMsg(CompleteAllreduce(0, 1))
+      worker ! ReduceBlock(Array(11f), 2, 0, 1, 0)
+      expectMsg(CompleteAllreduce(0, 0))
+
+    }
+  }
+
   private def simulateScatterBlocksFromPeers(worker: ActorRef, i: Int) = {
     worker ! ScatterBlock(Array(1.0f*(i+1), 1.0f*(i+1)), 1, 0, 0, i)
     worker ! ScatterBlock(Array(2.0f*(i+1), 2.0f*(i+1)), 2, 0, 0, i)
