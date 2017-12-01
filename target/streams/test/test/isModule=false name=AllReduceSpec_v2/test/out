@@ -7,3 +7,8 @@
 [0m[[0minfo[0m] [0m[32m- must single-round allreduce with nasty chunk size[0m[0m
 [0m[[0minfo[0m] [0m[32m- must single-round allreduce with nasty chunk size contd[0m[0m
 [0m[[0minfo[0m] [0m[32m- must multi-round allreduce[0m[0m
+[0m[[0minfo[0m] [0m[32m- must multi-round allreduce v2[0m[0m
+[0m[[0minfo[0m] [0m[32m- must missed scatter[0m[0m
+[0m[[0minfo[0m] [0m[32m- must future scatter[0m[0m
+[0m[[0minfo[0m] [0m[32m- must missed reduce[0m[0m
+[0m[[0minfo[0m] [0m[32m- must delayed future reduce[0m[0m

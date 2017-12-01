@@ -210,12 +210,11 @@ class AllReduceSpec_v2() extends TestKit(ActorSystem("MySpec")) with ImplicitSen
       val worker = createNewWorker()
       val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
       val idx = 0
-      val thReduce = 1f
-      val thComplete = 1f
+      val thReduce = 0.8f
+      val thComplete = 0.5f
       val maxLag = 5
       val dataSize = 8
       val maxChunkSize = 2
-      val numActors = 2
 
       worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       println("===============start multi-round test!==============")
@@ -229,17 +228,227 @@ class AllReduceSpec_v2() extends TestKit(ActorSystem("MySpec")) with ImplicitSen
         worker ! ScatterBlock(Array(0f + i, 1f + i), 1, 0, 0, i)
         worker ! ScatterBlock(Array(0f + i, 1f + i), 2, 0, 0, i)
         worker ! ScatterBlock(Array(0f + i, 1f + i), 3, 0, 0, i)
-        expectReduce(ReduceBlock(Array(0f + 4 * i, 1f * 4 + 4 * i), 0, 0, 0, i))
-        expectReduce(ReduceBlock(Array(0f + 4 * i, 1f * 4 + 4 * i), 0, 1, 0, i))
-        expectReduce(ReduceBlock(Array(0f + 4 * i, 1f * 4 + 4 * i), 0, 2, 0, i))
-        expectReduce(ReduceBlock(Array(0f + 4 * i, 1f * 4 + 4 * i), 0, 3, 0, i))
+        expectReduce(ReduceBlock(Array(0f + 3 * i, 1f * 3 + 3 * i), 0, 0, 0, i))
+        expectReduce(ReduceBlock(Array(0f + 3 * i, 1f * 3 + 3 * i), 0, 1, 0, i))
+        expectReduce(ReduceBlock(Array(0f + 3 * i, 1f * 3 + 3 * i), 0, 2, 0, i))
+        expectReduce(ReduceBlock(Array(0f + 3 * i, 1f * 3 + 3 * i), 0, 3, 0, i))
         worker ! ReduceBlock(Array(1f, 2f), 0, 0, 0, i)
         worker ! ReduceBlock(Array(1f, 2f), 1, 0, 0, i)
+        expectMsg(CompleteAllreduce(0, i))
         worker ! ReduceBlock(Array(1f, 2f), 2, 0, 0, i)
         worker ! ReduceBlock(Array(1f, 2f), 3, 0, 0, i)
-        expectMsg(CompleteAllreduce(0, i))
+        expectNoMsg();
       }
     }
+
+     "multi-round allreduce v2" in {
+      val worker = createNewWorker()
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(2)
+      val idx = 0
+      val thReduce = 0.6f
+      val thComplete = 0.8f
+      val maxLag = 5
+      val dataSize = 8
+      val maxChunkSize = 2
+
+      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
+      println("===============start multi-round test!==============")
+      for (i <- 0 until 10) {
+        worker ! StartAllreduce(i)
+        expectScatter(ScatterBlock(Array(0f + i, 1f + i), 0, 0, 0, i))
+        expectScatter(ScatterBlock(Array(2f + i, 3f + i), 0, 0, 1, i))
+        expectScatter(ScatterBlock(Array(4f + i, 5f + i), 0, 1, 0, i))
+        expectScatter(ScatterBlock(Array(6f + i, 7f + i), 0, 1, 1, i))
+        worker ! ScatterBlock(Array(0f + i, 1f + i), 0, 0, 0, i)
+        worker ! ScatterBlock(Array(2f + i, 3f + i), 0, 0, 1, i)
+        worker ! ScatterBlock(Array(10f + i, 11f + i), 1, 0, 0, i)
+        worker ! ScatterBlock(Array(12f + i, 13f + i), 1, 0, 1, i)
+        expectReduce(ReduceBlock(Array(0f * 1 + 1 * i, 1f * 1 + 1 * i), 0, 0, 0, i))
+        expectReduce(ReduceBlock(Array(0f * 1 + 1 * i, 1f * 1 + 1 * i), 0, 1, 0, i))
+        expectReduce(ReduceBlock(Array(2f * 1 + 1 * i, 3f * 1 + 1 * i), 0, 0, 1, i)) 
+        expectReduce(ReduceBlock(Array(2f * 1 + 1 * i, 3f * 1 + 1 * i), 0, 1, 1, i))
+        worker ! ReduceBlock(Array(1f, 2f), 0, 0, 0, i)
+        worker ! ReduceBlock(Array(1f, 2f), 0, 0, 1, i)
+        worker ! ReduceBlock(Array(1f, 2f), 1, 0, 0, i)
+        expectMsg(CompleteAllreduce(0, i))
+        worker ! ReduceBlock(Array(1f, 2f), 1, 0, 1, i)
+        expectNoMsg()
+        
+      }
+    }
+
+    "missed scatter" in {
+      val worker = createNewWorker()
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
+      val idx = 0
+      val thReduce = 0.75f
+      val thComplete = 0.75f
+      val maxLag = 5
+      val dataSize = 4
+      val maxChunkSize = 2
+      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
+      println("===============start outdated scatter test!==============")
+      worker ! StartAllreduce(0)
+      expectScatter(ScatterBlock(Array(0f), 0, 0, 0, 0))
+      expectScatter(ScatterBlock(Array(1f), 0, 1, 0, 0))
+      expectScatter(ScatterBlock(Array(2f), 0, 2, 0, 0))
+      expectScatter(ScatterBlock(Array(3f), 0, 3, 0, 0))
+      worker ! ScatterBlock(Array(0f), 0, 0, 0, 0)
+      expectNoMsg()
+      worker ! ScatterBlock(Array(2f), 1, 0, 0, 0)
+      expectNoMsg()
+      worker ! ScatterBlock(Array(4f), 2, 0, 0, 0)
+      worker ! ScatterBlock(Array(6f), 3, 0, 0, 0)
+
+      expectReduce(ReduceBlock(Array(6f), 0, 0, 0, 0))
+      expectReduce(ReduceBlock(Array(6f), 0, 1, 0, 0))
+      expectReduce(ReduceBlock(Array(6f), 0, 2, 0, 0))
+      expectReduce(ReduceBlock(Array(6f), 0, 3, 0, 0))
+      worker ! ReduceBlock(Array(12f), 0, 0, 0, 0)
+      worker ! ReduceBlock(Array(11f), 1, 0, 0, 0)
+      worker ! ReduceBlock(Array(10f), 2, 0, 0, 0)
+      expectMsg(CompleteAllreduce(0, 0))
+      worker ! ReduceBlock(Array(9f), 3, 0, 0, 0)
+      expectNoMsg()
+    }
+
+    "future scatter" in {
+      val worker = createNewWorker()
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
+      val idx = 0
+      val thReduce = 0.75f
+      val thComplete = 0.75f
+      val maxLag = 5
+      val dataSize = 4
+      val maxChunkSize = 2
+      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
+      println("===============start missing test!==============")
+      worker ! StartAllreduce(0)
+      expectScatter(ScatterBlock(Array(0f), 0, 0, 0, 0))
+      expectScatter(ScatterBlock(Array(1f), 0, 1, 0, 0))
+      expectScatter(ScatterBlock(Array(2f), 0, 2, 0, 0))
+      expectScatter(ScatterBlock(Array(3f), 0, 3, 0, 0))
+
+      worker ! ScatterBlock(Array(2f), 1, 0, 0, 0)
+      worker ! ScatterBlock(Array(4f), 2, 0, 0, 0)
+      worker ! ReduceBlock(Array(11f), 1, 0, 0, 0)
+      worker ! ReduceBlock(Array(10f), 2, 0, 0, 0)
+      // two of the messages is delayed, so now stall
+      worker ! StartAllreduce(1) // master call it to do round 1
+      worker ! ScatterBlock(Array(2f), 1, 0, 0, 1)
+      worker ! ScatterBlock(Array(4f), 2, 0, 0, 1)
+      worker ! ScatterBlock(Array(6f), 3, 0, 0, 1)
+
+      expectScatter(ScatterBlock(Array(1f), 0, 0, 0, 1))
+      expectScatter(ScatterBlock(Array(2f), 0, 1, 0, 1))
+      expectScatter(ScatterBlock(Array(3f), 0, 2, 0, 1))
+      expectScatter(ScatterBlock(Array(4f), 0, 3, 0, 1))
+      expectReduce(ReduceBlock(Array(12f), 0, 0, 0, 1))
+      expectReduce(ReduceBlock(Array(12f), 0, 1, 0, 1))
+      expectReduce(ReduceBlock(Array(12f), 0, 2, 0, 1))
+      expectReduce(ReduceBlock(Array(12f), 0, 3, 0, 1))
+      // delayed message now get there
+      worker ! ScatterBlock(Array(0f), 3, 0, 0, 0)
+      worker ! ScatterBlock(Array(6f), 3, 0, 0, 0) // should be outdated
+      expectReduce(ReduceBlock(Array(6f), 0, 0, 0, 0))
+      expectReduce(ReduceBlock(Array(6f), 0, 1, 0, 0))
+      expectReduce(ReduceBlock(Array(6f), 0, 2, 0, 0))
+      expectReduce(ReduceBlock(Array(6f), 0, 3, 0, 0))
+      println("finishing the reduce part")
+      //worker ! ReduceBlock(Array(12), 0, 0, 1)
+
+      worker ! ReduceBlock(Array(9f), 3, 0, 0, 0)
+      expectMsg(CompleteAllreduce(0, 0))
+      worker ! ReduceBlock(Array(11f), 1, 0, 0, 1)
+      worker ! ReduceBlock(Array(10f), 2, 0, 0, 1)
+      worker ! ReduceBlock(Array(9f), 3, 0, 0, 1)
+      expectMsg(CompleteAllreduce(0, 1))
+    }
+
+    "missed reduce" in {
+      val worker = createNewWorker()
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
+      val idx = 0
+      val thReduce = 1f
+      val thComplete = 0.75f
+      val dataSize = 4
+      val maxChunkSize = 100
+      val maxLag = 5
+      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
+      println("===============start missing test!==============")
+      worker ! StartAllreduce(0)
+      expectScatter(ScatterBlock(Array(0f), 0, 0, 0, 0))
+      expectScatter(ScatterBlock(Array(1f), 0, 1, 0, 0))
+      expectScatter(ScatterBlock(Array(2f), 0, 2, 0, 0))
+      expectScatter(ScatterBlock(Array(3f), 0, 3, 0, 0))
+      worker ! ScatterBlock(Array(0f), 0, 0, 0, 0)
+      worker ! ScatterBlock(Array(2f), 1, 0, 0, 0)
+      worker ! ScatterBlock(Array(4f), 2, 0, 0, 0)
+      worker ! ScatterBlock(Array(6f), 3, 0, 0, 0)
+      expectReduce(ReduceBlock(Array(12f), 0, 0, 0, 0))
+      expectReduce(ReduceBlock(Array(12f), 0, 1, 0, 0))
+      expectReduce(ReduceBlock(Array(12f), 0, 2, 0, 0))
+      expectReduce(ReduceBlock(Array(12f), 0, 3, 0, 0))
+      worker ! ReduceBlock(Array(12f), 0, 0, 0, 0)
+      expectNoMsg()
+      worker ! ReduceBlock(Array(11f), 1, 0, 0, 0)
+      expectNoMsg()
+      worker ! ReduceBlock(Array(10f), 2, 0, 0, 0)
+      //worker ! ReduceBlock(Array(9), 3, 0, 0)
+      expectMsg(CompleteAllreduce(0, 0))
+    }
+
+    "delayed future reduce" in {
+      val worker = createNewWorker()
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
+      val idx = 0
+      val thReduce = 0.75f
+      val thComplete = 0.75f
+      val dataSize = 4
+      val maxChunkSize = 100
+      val maxLag = 5
+      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
+      println("===============start delayed future reduce test!==============")
+      worker ! StartAllreduce(0)
+      expectScatter(ScatterBlock(Array(0f), 0, 0, 0, 0))
+      expectScatter(ScatterBlock(Array(1f), 0, 1, 0, 0))
+      expectScatter(ScatterBlock(Array(2f), 0, 2, 0, 0))
+      expectScatter(ScatterBlock(Array(3f), 0, 3, 0, 0))
+
+      worker ! ScatterBlock(Array(2f), 1, 0, 0, 0)
+      worker ! ScatterBlock(Array(4f), 2, 0, 0, 0)
+      worker ! ScatterBlock(Array(6f), 3, 0, 0, 0)
+      expectReduce(ReduceBlock(Array(12f), 0, 0, 0, 0))
+      expectReduce(ReduceBlock(Array(12f), 0, 1, 0, 0))
+      expectReduce(ReduceBlock(Array(12f), 0, 2, 0, 0))
+      expectReduce(ReduceBlock(Array(12f), 0, 3, 0, 0))
+      worker ! StartAllreduce(1) // master call it to do round 1
+      worker ! ScatterBlock(Array(3f), 1, 0, 0, 1)
+      worker ! ScatterBlock(Array(5f), 2, 0, 0, 1)
+      worker ! ScatterBlock(Array(7f), 3, 0, 0, 1)
+      // we send scatter value of round 1 to peers in case someone need it
+      expectScatter(ScatterBlock(Array(1f), 0, 0, 0, 1))
+      expectScatter(ScatterBlock(Array(2f), 0, 1, 0, 1))
+      expectScatter(ScatterBlock(Array(3f), 0, 2, 0, 1))
+      expectScatter(ScatterBlock(Array(4f), 0, 3, 0, 1))
+      expectReduce(ReduceBlock(Array(15f), 0, 0, 0, 1))
+      expectReduce(ReduceBlock(Array(15f), 0, 1, 0, 1))
+      expectReduce(ReduceBlock(Array(15f), 0, 2, 0, 1))
+      expectReduce(ReduceBlock(Array(15f), 0, 3, 0, 1))
+      println("finishing the reduce part")
+      // assertion: reduce t would never come after reduce t+1. (FIFO of message) otherwise would fail!
+      worker ! ReduceBlock(Array(11f), 1, 0, 0, 0)
+      worker ! ReduceBlock(Array(11f), 1, 0, 0, 1)
+      worker ! ReduceBlock(Array(10f), 2, 0, 0, 0)
+      worker ! ReduceBlock(Array(10f), 2, 0, 0, 1)
+      worker ! ReduceBlock(Array(9f), 3, 0, 0, 0)
+      worker ! ReduceBlock(Array(9f), 3, 0, 0, 1)
+      expectMsg(CompleteAllreduce(0, 0))
+      expectMsg(CompleteAllreduce(0, 1))
+    }
+
+
+
   }
 
 

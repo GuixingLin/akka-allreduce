@@ -17,7 +17,7 @@
 [0m[[0minfo[0m] [0mCompiling 1 Scala source to /Users/drtailor/Desktop/BIDMach/Akka/akka-allreduce/target/scala-2.12/test-classes...[0m
 [0m[[0mdebug[0m] [0mGetting org.scala-sbt:compiler-interface:0.13.13:component from component compiler for Scala 2.12.2[0m
 [0m[[0mdebug[0m] [0mGetting org.scala-sbt:compiler-interface:0.13.13:component from component compiler for Scala 2.12.2[0m
-[0m[[0mdebug[0m] [0mRunning cached compiler 5b1075d1, interfacing (CompilerInterface) with Scala compiler version 2.12.2[0m
+[0m[[0mdebug[0m] [0mRunning cached compiler 87a3170, interfacing (CompilerInterface) with Scala compiler version 2.12.2[0m
 [0m[[0mdebug[0m] [0mCalling Scala compiler with arguments  (CompilerInterface):[0m
 [0m[[0mdebug[0m] [0m	-deprecation[0m
 [0m[[0mdebug[0m] [0m	-feature[0m
@@ -37,11 +37,8 @@
 [0m[[33mwarn[0m] [0m/Users/drtailor/Desktop/BIDMach/Akka/akka-allreduce/src/test/scala/AllreduceSpec_v2.scala:153: local val numActors in value <local AllReduceSpec_v2> is never used[0m
 [0m[[33mwarn[0m] [0m      val numActors = 2[0m
 [0m[[33mwarn[0m] [0m          ^[0m
-[0m[[33mwarn[0m] [0m/Users/drtailor/Desktop/BIDMach/Akka/akka-allreduce/src/test/scala/AllreduceSpec_v2.scala:218: local val numActors in value <local AllReduceSpec_v2> is never used[0m
-[0m[[33mwarn[0m] [0m      val numActors = 2[0m
-[0m[[33mwarn[0m] [0m          ^[0m
-[0m[[33mwarn[0m] [0mfour warnings found[0m
-[0m[[0mdebug[0m] [0mScala compilation took 13.153461336 s[0m
+[0m[[33mwarn[0m] [0mthree warnings found[0m
+[0m[[0mdebug[0m] [0mScala compilation took 9.623942302 s[0m
 [0m[[0mdebug[0m] [0m[naha] New invalidations:[0m
 [0m[[0mdebug[0m] [0m[naha] 	Set()[0m
 [0m[[0mdebug[0m] [0m[naha] Initial set of included nodes: Set()[0m
