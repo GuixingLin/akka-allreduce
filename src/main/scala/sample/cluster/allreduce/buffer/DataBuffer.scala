@@ -6,8 +6,6 @@ case class DataBuffer(dataSize: Int,
                       threshold: Float,
                       maxChunkSize: Int) { 
 
-  //maxChunkSize is the maximum size of the msg that is allowed on the wire
-
   type Buffer = Array[Array[Float]]
 
   val numChunks =  math.ceil(1f * dataSize / maxChunkSize).toInt
@@ -25,7 +23,6 @@ case class DataBuffer(dataSize: Int,
   }
 
   private var countFilled: Array[Array[Int]] = Array.ofDim[Int](maxLag, numChunks)
-
   private val minRequired: Int = (threshold * peerSize).toInt
   private val minChunksRequired: Int = (threshold * peerSize * numChunks).toInt
 
@@ -35,8 +32,6 @@ case class DataBuffer(dataSize: Int,
 
   def store(data: Array[Float], row: Int, srcId: Int, chunkId: Int, pos: Int = 0) = {
     val array = temporalBuffer(row)(srcId)
-    //debug
-    //println(s"---Array length: ${array.length}; Data length: ${data.length}")
     System.arraycopy(
       data, 0,
       array, chunkId * maxChunkSize,
@@ -54,7 +49,6 @@ case class DataBuffer(dataSize: Int,
   }
 
   def get(row: Int, chunkId: Int): (Buffer, Int) = {
-    //temporalBuffer(row)
     var endPos = math.min(dataSize, (chunkId + 1) * maxChunkSize)
     var length = endPos - chunkId * maxChunkSize
     var output: Array[Array[Float]] = Array.empty
@@ -78,8 +72,6 @@ case class DataBuffer(dataSize: Int,
     for (i <- 0 until countFilled(row).length){
         chunksCompleteReduce += countFilled(row)(i);
     }
-    //debug
-    //println(s"-----Have gathered ${chunksCompleteReduce} reduced chunks from peers")
     chunksCompleteReduce == minChunksRequired
   }
 

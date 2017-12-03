@@ -21,7 +21,10 @@ lazy val `akka-sample-cluster-scala` = project
       "com.typesafe.akka" %% "akka-cluster-tools" % akkaVersion,
       "com.typesafe.akka" %% "akka-multi-node-testkit" % akkaVersion,
       "org.scalatest" %% "scalatest" % "3.0.1" % Test,
-      "io.kamon" % "sigar-loader" % "1.6.6-rev002"),
+      // "ch.qos.logback" % "logback-classic" % "1.1.7",
+      // "com.typesafe.akka" %% "akka-slf4j_2.11" % akkaVersion,
+      "io.kamon" % "sigar-loader" % "1.6.6-rev002"
+    ),
     fork in run := true,
     mainClass in (Compile, run) := Some("sample.cluster.allreduce.AllreduceMaster"),
     // disable parallel tests

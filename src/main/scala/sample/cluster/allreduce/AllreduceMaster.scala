@@ -1,5 +1,5 @@
 package sample.cluster.allreduce
-
+import akka.event.Logging
 import akka.Done
 import akka.actor.{Actor, ActorRef, ActorSystem, Props, RootActorPath, Terminated}
 import akka.cluster.ClusterEvent.{CurrentClusterState, MemberUp}
@@ -21,7 +21,7 @@ class AllreduceMaster(
   dataSize: Int,
   maxRound: Int,
   maxChunkSize: Int
-) extends Actor {
+) extends Actor with akka.actor.ActorLogging{
 
   var workers = Map[Int, ActorRef]()
   val cluster = Cluster(context.system)
@@ -36,11 +36,11 @@ class AllreduceMaster(
   def receive = {
 
     case MemberUp(m) =>
-      println(s"----detect member ${m.address} up")
+      log.info(s"\n----Detect member ${m.address} up")
       register(m).onSuccess {
         case Done =>
           if (workers.size >= (totalWorkers * thAllreduce).toInt) {
-            println(s"----${workers.size} (out of ${totalWorkers}) workers are up")
+            log.info(s"\n----${workers.size} (out of ${totalWorkers}) workers are up")
             init_workers()
             round = 0
             startAllreduce()
@@ -48,7 +48,7 @@ class AllreduceMaster(
       }
 
     case Terminated(a) =>
-      println(s"$a is terminated, removing it from the set")
+      log.info(s"\n----$a is terminated, removing it from the set")
       for ((idx, worker) <- workers){
         if(worker == a) {
           workers -= idx
@@ -56,11 +56,11 @@ class AllreduceMaster(
       }
 
     case c : CompleteAllreduce =>
-      println(s"----node ${c.srcId} completes allreduce round ${c.round}")
+      log.info(s"\n----Node ${c.srcId} completes allreduce round ${c.round}")
       if (c.round == round) {
         numComplete += 1
         if (numComplete >= totalWorkers * thAllreduce && round < maxRound) {
-          println(s"----${numComplete} (out of ${totalWorkers}) workers complete round ${round}\n")
+          log.info(s"\n----${numComplete} (out of ${totalWorkers}) workers complete round ${round}\n")
           round += 1
           startAllreduce()
         }
@@ -74,7 +74,7 @@ class AllreduceMaster(
           context watch workerRef
           val new_idx: Integer = workers.size
           workers = workers.updated(new_idx, workerRef)
-          println(s"----current size = ${workers.size}")
+          log.info(s"\n----current size = ${workers.size}")
           Done
       }
     } else {
@@ -83,13 +83,13 @@ class AllreduceMaster(
 
     private def init_workers() = {
       for ((idx, worker) <- workers) {
-        println(s"----init worker $idx $worker")
+        log.info(s"\n----Init worker $idx $worker")
         worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       }
     }
 
     private def startAllreduce() = {
-      println(s"----start allreduce round ${round}")
+      log.info(s"\n----Start allreduce round ${round}")
       numComplete = 0
       for ((idx, worker) <- workers) {
         worker ! StartAllreduce(round)
@@ -101,24 +101,25 @@ class AllreduceMaster(
 object AllreduceMaster {
   def main(args: Array[String]): Unit = {
     // Override the configuration of the port when specified as program argument
-    val totalWorkers = 2
+    
     val thAllreduce = 1f
     val thReduce = 0.9f
     val thComplete = 0.8f
     val maxLag = 1
     val maxRound = 100
-    val dataSize = if (args.length <= 1) totalWorkers * 5 else args(1).toInt
+    
     val port = if (args.isEmpty) "2551" else args(0)
-    val maxChunkSize = if (args.length <= 2) 1 else args(2).toInt
+    val totalWorkers = if (args.length <= 1) 2 else args(1).toInt
+    val dataSize = if (args.length <= 2) totalWorkers * 5 else args(2).toInt
+    val maxChunkSize = if (args.length <= 3) 2 else args(3).toInt
 
-    //debug
-    println(s"----dataSize is :${dataSize}")
-
-    val config = ConfigFactory.parseString(s"akka.remote.netty.tcp.port=$port").
+    val config = ConfigFactory.parseString(s"\nakka.remote.netty.tcp.port=$port").
       withFallback(ConfigFactory.parseString("akka.cluster.roles = [master]")).
       withFallback(ConfigFactory.load())
 
     val system = ActorSystem("ClusterSystem", config)
+
+    system.log.info(s"-------\n Port = ${port} \n Number of Workers = ${totalWorkers} \n Message Size = ${dataSize} \n Max Chunk Size = ${maxChunkSize}");
     val master = system.actorOf(
       Props(
         classOf[AllreduceMaster], 

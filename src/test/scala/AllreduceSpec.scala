@@ -583,6 +583,7 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       }
     }
 
+/*
     "buffer when unitialized" in {
 
       val worker = createNewWorker(source, sink)
@@ -599,6 +600,7 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       expectBasicSendingScatterBlock(worker, 0)
 
     }
+*/
 
   }
 
