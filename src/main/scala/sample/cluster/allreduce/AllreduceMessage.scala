@@ -12,8 +12,7 @@ final case class InitWorkers(
 	thComplete : Float,
 	maxLag : Int,
 	dataSize: Int,
-	maxChunkSize: Int,
-	randomSeed: Long
+	maxChunkSize: Int
 )
 final case class StartAllreduce(round : Int)
 final case class ScatterBlock(value : Array[Float], srcId : Int, destId : Int, chunkId : Int, round : Int)
