@@ -101,6 +101,7 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
           maxScattered += 1
         }
       }
+      completed = completed.filterNot(e => e < round)
 
     case s: ScatterBlock =>
       log.debug(s"\n----receive scattered data from round ${s.round}: value = ${s.value.toList}, srcId = ${s.srcId}, destId = ${s.destId}, chunkId=${s.chunkId}, current round = $round")

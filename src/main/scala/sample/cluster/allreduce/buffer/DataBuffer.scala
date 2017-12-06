@@ -7,6 +7,7 @@ case class DataBuffer(dataSize: Int,
                       maxChunkSize: Int) { 
 
   type Buffer = Array[Array[Float]]
+  var temporalOffset = 0
 
   val numChunks =  math.ceil(1f * dataSize / maxChunkSize).toInt
 
@@ -15,6 +16,7 @@ case class DataBuffer(dataSize: Int,
       initializePeerBuffer()
     }
   }
+
 
   private def initializePeerBuffer(): Buffer = {
     Array.fill(peerSize) {
@@ -27,25 +29,25 @@ case class DataBuffer(dataSize: Int,
   private val minChunksRequired: Int = (threshold * peerSize * numChunks).toInt
 
   def reachThreshold(row: Int, chunkId: Int): Boolean = {
-    countFilled(row)(chunkId) == minRequired
+    countFilled((row+temporalOffset)%maxLag)(chunkId) == minRequired
   }
 
   def store(data: Array[Float], row: Int, srcId: Int, chunkId: Int, pos: Int = 0) = {
-    val array = temporalBuffer(row)(srcId)
+    val array = temporalBuffer((row+temporalOffset)%maxLag)(srcId)
     System.arraycopy(
       data, 0,
       array, chunkId * maxChunkSize,
       data.size)
 
-    countFilled(row)(chunkId) += 1
+    countFilled((row+temporalOffset)%maxLag)(chunkId) += 1
   }
 
   def count(row: Int, chunkId: Int): Int = {
-    countFilled(row)(chunkId)
+    countFilled((row+temporalOffset)%maxLag)(chunkId)
   }
 
   def get(row: Int): Buffer = {
-    temporalBuffer(row)
+    temporalBuffer((row+temporalOffset)%maxLag)
   }
 
   def get(row: Int, chunkId: Int): (Buffer, Int) = {
@@ -53,24 +55,21 @@ case class DataBuffer(dataSize: Int,
     var length = endPos - chunkId * maxChunkSize
     var output: Array[Array[Float]] = Array.empty
     for (i <- 0 until temporalBuffer(row).length){
-      output :+= temporalBuffer(row)(i).slice(chunkId * maxChunkSize, endPos)
+      output :+= temporalBuffer((row+temporalOffset)%maxLag)(i).slice(chunkId * maxChunkSize, endPos)
     }
     (output, length)
   }
 
   def up(): Unit = {
-    for (i <- 1 until maxLag) {
-      temporalBuffer(i - 1) = temporalBuffer(i)
-      countFilled(i - 1) = countFilled(i)
-    }
-    temporalBuffer(maxLag - 1) = initializePeerBuffer()
-    countFilled(maxLag - 1) = Array.fill(numChunks)(0);
+    temporalOffset = (temporalOffset + 1) % maxLag
+    temporalBuffer((temporalOffset + maxLag - 1)%maxLag) = initializePeerBuffer()
+    countFilled((temporalOffset + maxLag - 1)%maxLag) = Array.fill(numChunks)(0);
   }
 
   def reachRoundThreshold(row: Int) : Boolean = {
     var chunksCompleteReduce = 0
     for (i <- 0 until countFilled(row).length){
-        chunksCompleteReduce += countFilled(row)(i);
+        chunksCompleteReduce += countFilled((row+temporalOffset)%maxLag)(i);
     }
     chunksCompleteReduce == minChunksRequired
   }
