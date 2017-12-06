@@ -3,10 +3,7 @@ package sample.cluster.allreduce
 import akka.actor.{Actor, ActorRef, ActorSystem, Props, Terminated}
 import com.typesafe.config.ConfigFactory
 import sample.cluster.allreduce.buffer.DataBuffer
-import akka.event.Logging
 
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration._
 import scala.language.postfixOps
 
 class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
@@ -194,9 +191,10 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
   }
 
   private def scatter() = {
-    for ((idx, worker) <- peers) {
+    for( i <- 0 until peers.size){
+      val idx = (i+id) % peers.size
+      val worker = peers.get(idx).get
       val dataBlock = getDataBlock(idx)
-
       //Partition the dataBlock if it is too big
       for (i <- 0 until myNumChunks) {
         val chunkStart = math.min(i * maxChunkSize, dataBlock.length - 1);
@@ -230,9 +228,11 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
 
   private def broadcast(data: Array[Float], chunkId: Int, bcastRound: Int) = {
     log.debug(s"\n----Start broadcasting")
-    for ((idx, worker) <- peers) {
+    for( i <- 0 until peers.size){
+        val idx = (i+id) % peers.size
+        var worker = peers.get(idx).get
         log.debug(s"\n----Broadcast data:${data.toList}, src: ${id}, dest: ${idx}, chunkId: ${chunkId}, round: ${bcastRound}")
-        worker ! ReduceBlock(data, id, idx, chunkId, bcastRound);
+        worker ! ReduceBlock(data, id, idx, chunkId, bcastRound)
     }
   }
 
