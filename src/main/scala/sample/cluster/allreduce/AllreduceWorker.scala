@@ -8,6 +8,7 @@ import akka.event.Logging
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.language.postfixOps
+import scala.util.Random
 
 class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
                       dataSink: AllReduceOutput => Unit) extends Actor with akka.actor.ActorLogging{
@@ -33,7 +34,8 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
   var reduceBlockBuf: DataBuffer = DataBuffer.empty // store reduced data received
   var maxChunkSize = 1024; // maximum msg size that is allowed on the wire
   var myNumChunks = 0
-  var maxNumChunks = 0;
+  var maxNumChunks = 0
+  var randomSeed = 42L
 
   def receive = {
 
@@ -74,6 +76,8 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
         threshold = thComplete,
         maxChunkSize = maxChunkSize
       )
+
+      randomSeed = init.randomSeed
 
       log.info(s"\n----Actor id = ${id}")
       for (i <- 0 until peers.size) {
@@ -194,7 +198,9 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
   }
 
   private def scatter() = {
-    for ((idx, worker) <- peers) {
+    //impossible to know the order, so randomization is the best we can do
+    val rand = new Random(randomSeed*(id+1)+maxScattered)
+    for ((idx, worker) <- rand.shuffle(peers)) {
       val dataBlock = getDataBlock(idx)
 
       //Partition the dataBlock if it is too big
@@ -230,7 +236,8 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
 
   private def broadcast(data: Array[Float], chunkId: Int, bcastRound: Int) = {
     log.debug(s"\n----Start broadcasting")
-    for ((idx, worker) <- peers) {
+    val rand = new Random(randomSeed*(id+1)+bcastRound);
+    for ((idx, worker) <- rand.shuffle(peers)) {
         log.debug(s"\n----Broadcast data:${data.toList}, src: ${id}, dest: ${idx}, chunkId: ${chunkId}, round: ${bcastRound}")
         worker ! ReduceBlock(data, id, idx, chunkId, bcastRound);
     }
