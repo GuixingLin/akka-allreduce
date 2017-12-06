@@ -16,5 +16,5 @@ final case class InitWorkers(
 )
 final case class StartAllreduce(round : Int)
 final case class ScatterBlock(value : Array[Float], srcId : Int, destId : Int, chunkId : Int, round : Int)
-final case class ReduceBlock(value: Array[Float], srcId : Int, destId : Int, chunkId : Int, round : Int)
+final case class ReduceBlock(value: Array[Float], srcId : Int, destId : Int, chunkId : Int, round : Int, count: Int)
 final case class CompleteAllreduce(srcId : Int, round : Int)
