@@ -72,11 +72,11 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
 
       worker ! StartAllreduce(0)
       worker ! ScatterBlock(Array(2f), srcId = 0, destId = 1, chunkId = 0, 0)
-      worker ! ReduceBlock(Array(0f, 2f), srcId = 0, destId = 1, chunkId =0, 0)
+      worker ! ReduceBlock(Array(0f, 2f), srcId = 0, destId = 1, chunkId =0, 0, count=2)
 
       worker ! StartAllreduce(1)
       worker ! ScatterBlock(Array(3f), srcId = 0, destId = 1, chunkId = 0, 1)
-      worker ! ReduceBlock(Array(2f, 4f), srcId = 0, destId = 1, chunkId =0, 1)
+      worker ! ReduceBlock(Array(2f, 4f), srcId = 0, destId = 1, chunkId =0, 1, count=2)
 
       fishForMessage() {
         case CompleteAllreduce(1, 0) => true
@@ -108,10 +108,10 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxMsgSize)
       worker ! StartAllreduce(0)
 
-      worker ! ReduceBlock(Array(12f, 15f), 0, 0, 0, futureRound)
-      worker ! ReduceBlock(Array(11f, 10f), 1, 0, 0, futureRound)
-      worker ! ReduceBlock(Array(10f, 20f), 2, 0, 0, futureRound)
-      worker ! ReduceBlock(Array(9f, 10f), 3, 0, 0, futureRound)
+      worker ! ReduceBlock(Array(12f, 15f), 0, 0, 0, futureRound, count = 4)
+      worker ! ReduceBlock(Array(11f, 10f), 1, 0, 0, futureRound, count = 4)
+      worker ! ReduceBlock(Array(10f, 20f), 2, 0, 0, futureRound, count = 4)
+      worker ! ReduceBlock(Array(9f, 10f), 3, 0, 0, futureRound, count = 4)
 
       fishForMessage() {
         case c: CompleteAllreduce => {
@@ -159,16 +159,16 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       }
 
       // expect sending reduced result to other nodes
-      expectReduce(ReduceBlock(Array(12f, 12f), 0, 0, 0, 0))
-      expectReduce(ReduceBlock(Array(12f, 12f), 0, 1, 0, 0))
-      expectReduce(ReduceBlock(Array(12f, 12f), 0, 2, 0, 0))
-      expectReduce(ReduceBlock(Array(12f, 12f), 0, 3, 0, 0))
+      expectReduce(ReduceBlock(Array(12f, 12f), 0, 0, 0, 0, 4))
+      expectReduce(ReduceBlock(Array(12f, 12f), 0, 1, 0, 0, 4))
+      expectReduce(ReduceBlock(Array(12f, 12f), 0, 2, 0, 0, 4))
+      expectReduce(ReduceBlock(Array(12f, 12f), 0, 3, 0, 0, 4))
 
       // simulate sending reduced block from other nodes
-      worker ! ReduceBlock(Array(12f, 15f), 0, 0, 0, 0)
-      worker ! ReduceBlock(Array(11f, 10f), 1, 0, 0, 0)
-      worker ! ReduceBlock(Array(10f, 20f), 2, 0, 0, 0)
-      worker ! ReduceBlock(Array(9f, 10f), 3, 0, 0, 0)
+      worker ! ReduceBlock(Array(12f, 15f), 0, 0, 0, 0, 4)
+      worker ! ReduceBlock(Array(11f, 10f), 1, 0, 0, 0, 4)
+      worker ! ReduceBlock(Array(10f, 20f), 2, 0, 0, 0, 4)
+      worker ! ReduceBlock(Array(9f, 10f), 3, 0, 0, 0, 4)
       expectMsg(CompleteAllreduce(0, 0))
     }
 
@@ -203,18 +203,18 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
 
 
       // expect sending reduced result to other nodes
-      expectReduce(ReduceBlock(Array(0f, 1f), srcId = 0, destId = 0, 0, 0))
-      expectReduce(ReduceBlock(Array(0f, 1f), srcId = 0, destId = 1, 0, 0))
-      expectReduce(ReduceBlock(Array(2f), srcId = 0, destId = 0, 1, 0))
-      expectReduce(ReduceBlock(Array(2f), srcId = 0, destId = 1, 1, 0))
+      expectReduce(ReduceBlock(Array(0f, 1f), srcId = 0, destId = 0, 0, 0, 1))
+      expectReduce(ReduceBlock(Array(0f, 1f), srcId = 0, destId = 1, 0, 0, 1))
+      expectReduce(ReduceBlock(Array(2f), srcId = 0, destId = 0, 1, 0, 1))
+      expectReduce(ReduceBlock(Array(2f), srcId = 0, destId = 1, 1, 0, 1))
 
       // simulate sending reduced block from other nodes
-      worker ! ReduceBlock(Array(0f, 2f), 0, 0, 0, 0)
-      worker ! ReduceBlock(Array(4f), 0, 0, 1, 0)
+      worker ! ReduceBlock(Array(0f, 2f), 0, 0, 0, 0, 1)
+      worker ! ReduceBlock(Array(4f), 0, 0, 1, 0, 1)
 
-      worker ! ReduceBlock(Array(6f, 8f), 1, 0, 0, 0)
+      worker ! ReduceBlock(Array(6f, 8f), 1, 0, 0, 0, 1)
       expectMsg(CompleteAllreduce(0, 0))
-      worker ! ReduceBlock(Array(10f), 1, 0, 1, 0)
+      worker ! ReduceBlock(Array(10f), 1, 0, 1, 0, 1)
 
 
     }
@@ -259,28 +259,28 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
 
       // expect sending reduced result to other nodes
       //expectNoMsg()
-      expectReduce(ReduceBlock(Array(0f), srcId = 0, destId = 0, 0, 0))
-      expectReduce(ReduceBlock(Array(0f), srcId = 0, destId = 1, 0, 0))
-      expectReduce(ReduceBlock(Array(0f), srcId = 0, destId = 2, 0, 0))
-      expectReduce(ReduceBlock(Array(2f), srcId = 0, destId = 0, 1, 0))
-      expectReduce(ReduceBlock(Array(2f), srcId = 0, destId = 1, 1, 0))
-      expectReduce(ReduceBlock(Array(2f), srcId = 0, destId = 2, 1, 0))
-      expectReduce(ReduceBlock(Array(4f), srcId = 0, destId = 0, 2, 0))
-      expectReduce(ReduceBlock(Array(4f), srcId = 0, destId = 1, 2, 0))
-      expectReduce(ReduceBlock(Array(4f), srcId = 0, destId = 2, 2, 0))
+      expectReduce(ReduceBlock(Array(0f), srcId = 0, destId = 0, 0, 0, 2))
+      expectReduce(ReduceBlock(Array(0f), srcId = 0, destId = 1, 0, 0, 2))
+      expectReduce(ReduceBlock(Array(0f), srcId = 0, destId = 2, 0, 0, 2))
+      expectReduce(ReduceBlock(Array(2f), srcId = 0, destId = 0, 1, 0, 2))
+      expectReduce(ReduceBlock(Array(2f), srcId = 0, destId = 1, 1, 0, 2))
+      expectReduce(ReduceBlock(Array(2f), srcId = 0, destId = 2, 1, 0, 2))
+      expectReduce(ReduceBlock(Array(4f), srcId = 0, destId = 0, 2, 0, 2))
+      expectReduce(ReduceBlock(Array(4f), srcId = 0, destId = 1, 2, 0, 2))
+      expectReduce(ReduceBlock(Array(4f), srcId = 0, destId = 2, 2, 0, 2))
 
 
       // simulate sending reduced block from other nodes
-      worker ! ReduceBlock(Array(0f), srcId = 0, destId = 0, 0, 0)
-      worker ! ReduceBlock(Array(3f), srcId = 0, destId = 0, 1, 0)
-      worker ! ReduceBlock(Array(6f), srcId = 0, destId = 0, 2, 0)
-      worker ! ReduceBlock(Array(9f), srcId = 1, destId = 0, 0, 0)
-      worker ! ReduceBlock(Array(12f), srcId = 1, destId = 0, 1, 0)
-      worker ! ReduceBlock(Array(15f), srcId = 1, destId = 0, 2, 0)
-      worker ! ReduceBlock(Array(18f), srcId = 2, destId = 0, 0, 0)
+      worker ! ReduceBlock(Array(0f), srcId = 0, destId = 0, 0, 0, 2)
+      worker ! ReduceBlock(Array(3f), srcId = 0, destId = 0, 1, 0, 2)
+      worker ! ReduceBlock(Array(6f), srcId = 0, destId = 0, 2, 0, 2)
+      worker ! ReduceBlock(Array(9f), srcId = 1, destId = 0, 0, 0, 2)
+      worker ! ReduceBlock(Array(12f), srcId = 1, destId = 0, 1, 0, 2)
+      worker ! ReduceBlock(Array(15f), srcId = 1, destId = 0, 2, 0, 2)
+      worker ! ReduceBlock(Array(18f), srcId = 2, destId = 0, 0, 0, 2)
       expectMsg(CompleteAllreduce(0, 0))
-      worker ! ReduceBlock(Array(21f), srcId = 2, destId = 0, 1, 0)
-      worker ! ReduceBlock(Array(24f), srcId = 2, destId = 0, 2, 0)
+      worker ! ReduceBlock(Array(21f), srcId = 2, destId = 0, 1, 0, 2)
+      worker ! ReduceBlock(Array(24f), srcId = 2, destId = 0, 2, 0, 2)
       expectNoMsg()
     }
 
@@ -306,15 +306,15 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
         worker ! ScatterBlock(Array(0f + i, 1f + i), 1, 0, 0, i)
         worker ! ScatterBlock(Array(0f + i, 1f + i), 2, 0, 0, i)
         worker ! ScatterBlock(Array(0f + i, 1f + i), 3, 0, 0, i)
-        expectReduce(ReduceBlock(Array(0f + 3 * i, 1f * 3 + 3 * i), 0, 0, 0, i))
-        expectReduce(ReduceBlock(Array(0f + 3 * i, 1f * 3 + 3 * i), 0, 1, 0, i))
-        expectReduce(ReduceBlock(Array(0f + 3 * i, 1f * 3 + 3 * i), 0, 2, 0, i))
-        expectReduce(ReduceBlock(Array(0f + 3 * i, 1f * 3 + 3 * i), 0, 3, 0, i))
-        worker ! ReduceBlock(Array(1f, 2f), 0, 0, 0, i)
-        worker ! ReduceBlock(Array(1f, 2f), 1, 0, 0, i)
+        expectReduce(ReduceBlock(Array(0f + 3 * i, 1f * 3 + 3 * i), 0, 0, 0, i, 3))
+        expectReduce(ReduceBlock(Array(0f + 3 * i, 1f * 3 + 3 * i), 0, 1, 0, i, 3))
+        expectReduce(ReduceBlock(Array(0f + 3 * i, 1f * 3 + 3 * i), 0, 2, 0, i, 3))
+        expectReduce(ReduceBlock(Array(0f + 3 * i, 1f * 3 + 3 * i), 0, 3, 0, i, 3))
+        worker ! ReduceBlock(Array(1f, 2f), 0, 0, 0, i, 3)
+        worker ! ReduceBlock(Array(1f, 2f), 1, 0, 0, i, 3)
         expectMsg(CompleteAllreduce(0, i))
-        worker ! ReduceBlock(Array(1f, 2f), 2, 0, 0, i)
-        worker ! ReduceBlock(Array(1f, 2f), 3, 0, 0, i)
+        worker ! ReduceBlock(Array(1f, 2f), 2, 0, 0, i, 3)
+        worker ! ReduceBlock(Array(1f, 2f), 3, 0, 0, i, 3)
         expectNoMsg();
       }
     }
@@ -341,15 +341,15 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
         worker ! ScatterBlock(Array(2f + i, 3f + i), 0, 0, 1, i)
         worker ! ScatterBlock(Array(10f + i, 11f + i), 1, 0, 0, i)
         worker ! ScatterBlock(Array(12f + i, 13f + i), 1, 0, 1, i)
-        expectReduce(ReduceBlock(Array(0f * 1 + 1 * i, 1f * 1 + 1 * i), 0, 0, 0, i))
-        expectReduce(ReduceBlock(Array(0f * 1 + 1 * i, 1f * 1 + 1 * i), 0, 1, 0, i))
-        expectReduce(ReduceBlock(Array(2f * 1 + 1 * i, 3f * 1 + 1 * i), 0, 0, 1, i))
-        expectReduce(ReduceBlock(Array(2f * 1 + 1 * i, 3f * 1 + 1 * i), 0, 1, 1, i))
-        worker ! ReduceBlock(Array(1f, 2f), 0, 0, 0, i)
-        worker ! ReduceBlock(Array(1f, 2f), 0, 0, 1, i)
-        worker ! ReduceBlock(Array(1f, 2f), 1, 0, 0, i)
+        expectReduce(ReduceBlock(Array(0f * 1 + 1 * i, 1f * 1 + 1 * i), 0, 0, 0, i, 1))
+        expectReduce(ReduceBlock(Array(0f * 1 + 1 * i, 1f * 1 + 1 * i), 0, 1, 0, i, 1))
+        expectReduce(ReduceBlock(Array(2f * 1 + 1 * i, 3f * 1 + 1 * i), 0, 0, 1, i, 1))
+        expectReduce(ReduceBlock(Array(2f * 1 + 1 * i, 3f * 1 + 1 * i), 0, 1, 1, i, 1))
+        worker ! ReduceBlock(Array(1f, 2f), 0, 0, 0, i, 1)
+        worker ! ReduceBlock(Array(1f, 2f), 0, 0, 1, i, 1)
+        worker ! ReduceBlock(Array(1f, 2f), 1, 0, 0, i, 1)
         expectMsg(CompleteAllreduce(0, i))
-        worker ! ReduceBlock(Array(1f, 2f), 1, 0, 1, i)
+        worker ! ReduceBlock(Array(1f, 2f), 1, 0, 1, i, 1)
         expectNoMsg()
 
       }
@@ -379,15 +379,15 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       worker ! ScatterBlock(Array(4f), 2, 0, 0, 0)
       worker ! ScatterBlock(Array(6f), 3, 0, 0, 0)
 
-      expectReduce(ReduceBlock(Array(6f), 0, 0, 0, 0))
-      expectReduce(ReduceBlock(Array(6f), 0, 1, 0, 0))
-      expectReduce(ReduceBlock(Array(6f), 0, 2, 0, 0))
-      expectReduce(ReduceBlock(Array(6f), 0, 3, 0, 0))
-      worker ! ReduceBlock(Array(12f), 0, 0, 0, 0)
-      worker ! ReduceBlock(Array(11f), 1, 0, 0, 0)
-      worker ! ReduceBlock(Array(10f), 2, 0, 0, 0)
+      expectReduce(ReduceBlock(Array(6f), 0, 0, 0, 0, 3))
+      expectReduce(ReduceBlock(Array(6f), 0, 1, 0, 0, 3))
+      expectReduce(ReduceBlock(Array(6f), 0, 2, 0, 0, 3))
+      expectReduce(ReduceBlock(Array(6f), 0, 3, 0, 0, 3))
+      worker ! ReduceBlock(Array(12f), 0, 0, 0, 0, 3)
+      worker ! ReduceBlock(Array(11f), 1, 0, 0, 0, 3)
+      worker ! ReduceBlock(Array(10f), 2, 0, 0, 0, 3)
       expectMsg(CompleteAllreduce(0, 0))
-      worker ! ReduceBlock(Array(9f), 3, 0, 0, 0)
+      worker ! ReduceBlock(Array(9f), 3, 0, 0, 0, 3)
       expectNoMsg()
     }
 
@@ -410,8 +410,8 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
 
       worker ! ScatterBlock(Array(2f), 1, 0, 0, 0)
       worker ! ScatterBlock(Array(4f), 2, 0, 0, 0)
-      worker ! ReduceBlock(Array(11f), 1, 0, 0, 0)
-      worker ! ReduceBlock(Array(10f), 2, 0, 0, 0)
+      worker ! ReduceBlock(Array(11f), 1, 0, 0, 0, 3)
+      worker ! ReduceBlock(Array(10f), 2, 0, 0, 0, 3)
       // two of the messages is delayed, so now stall
       worker ! StartAllreduce(1) // master call it to do round 1
       worker ! ScatterBlock(Array(2f), 1, 0, 0, 1)
@@ -422,25 +422,25 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       expectScatter(ScatterBlock(Array(2f), 0, 1, 0, 1))
       expectScatter(ScatterBlock(Array(3f), 0, 2, 0, 1))
       expectScatter(ScatterBlock(Array(4f), 0, 3, 0, 1))
-      expectReduce(ReduceBlock(Array(12f), 0, 0, 0, 1))
-      expectReduce(ReduceBlock(Array(12f), 0, 1, 0, 1))
-      expectReduce(ReduceBlock(Array(12f), 0, 2, 0, 1))
-      expectReduce(ReduceBlock(Array(12f), 0, 3, 0, 1))
+      expectReduce(ReduceBlock(Array(12f), 0, 0, 0, 1, 3))
+      expectReduce(ReduceBlock(Array(12f), 0, 1, 0, 1, 3))
+      expectReduce(ReduceBlock(Array(12f), 0, 2, 0, 1, 3))
+      expectReduce(ReduceBlock(Array(12f), 0, 3, 0, 1, 3))
       // delayed message now get there
       worker ! ScatterBlock(Array(0f), 3, 0, 0, 0)
       worker ! ScatterBlock(Array(6f), 3, 0, 0, 0) // should be outdated
-      expectReduce(ReduceBlock(Array(6f), 0, 0, 0, 0))
-      expectReduce(ReduceBlock(Array(6f), 0, 1, 0, 0))
-      expectReduce(ReduceBlock(Array(6f), 0, 2, 0, 0))
-      expectReduce(ReduceBlock(Array(6f), 0, 3, 0, 0))
+      expectReduce(ReduceBlock(Array(6f), 0, 0, 0, 0, 3))
+      expectReduce(ReduceBlock(Array(6f), 0, 1, 0, 0, 3))
+      expectReduce(ReduceBlock(Array(6f), 0, 2, 0, 0, 3))
+      expectReduce(ReduceBlock(Array(6f), 0, 3, 0, 0, 3))
       println("finishing the reduce part")
       //worker ! ReduceBlock(Array(12), 0, 0, 1)
 
-      worker ! ReduceBlock(Array(9f), 3, 0, 0, 0)
+      worker ! ReduceBlock(Array(9f), 3, 0, 0, 0, 3)
       expectMsg(CompleteAllreduce(0, 0))
-      worker ! ReduceBlock(Array(11f), 1, 0, 0, 1)
-      worker ! ReduceBlock(Array(10f), 2, 0, 0, 1)
-      worker ! ReduceBlock(Array(9f), 3, 0, 0, 1)
+      worker ! ReduceBlock(Array(11f), 1, 0, 0, 1, 3)
+      worker ! ReduceBlock(Array(10f), 2, 0, 0, 1, 3)
+      worker ! ReduceBlock(Array(9f), 3, 0, 0, 1, 3)
       expectMsg(CompleteAllreduce(0, 1))
     }
 
@@ -465,15 +465,15 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       worker ! ScatterBlock(Array(2f), 1, 0, 0, 0)
       worker ! ScatterBlock(Array(4f), 2, 0, 0, 0)
       worker ! ScatterBlock(Array(6f), 3, 0, 0, 0)
-      expectReduce(ReduceBlock(Array(12f), 0, 0, 0, 0))
-      expectReduce(ReduceBlock(Array(12f), 0, 1, 0, 0))
-      expectReduce(ReduceBlock(Array(12f), 0, 2, 0, 0))
-      expectReduce(ReduceBlock(Array(12f), 0, 3, 0, 0))
-      worker ! ReduceBlock(Array(12f), 0, 0, 0, 0)
+      expectReduce(ReduceBlock(Array(12f), 0, 0, 0, 0, 4))
+      expectReduce(ReduceBlock(Array(12f), 0, 1, 0, 0, 4))
+      expectReduce(ReduceBlock(Array(12f), 0, 2, 0, 0, 4))
+      expectReduce(ReduceBlock(Array(12f), 0, 3, 0, 0, 4))
+      worker ! ReduceBlock(Array(12f), 0, 0, 0, 0, 4)
       expectNoMsg()
-      worker ! ReduceBlock(Array(11f), 1, 0, 0, 0)
+      worker ! ReduceBlock(Array(11f), 1, 0, 0, 0, 4)
       expectNoMsg()
-      worker ! ReduceBlock(Array(10f), 2, 0, 0, 0)
+      worker ! ReduceBlock(Array(10f), 2, 0, 0, 0, 4)
       //worker ! ReduceBlock(Array(9), 3, 0, 0)
       expectMsg(CompleteAllreduce(0, 0))
     }
@@ -499,10 +499,10 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       worker ! ScatterBlock(Array(2f), 1, 0, 0, 0)
       worker ! ScatterBlock(Array(4f), 2, 0, 0, 0)
       worker ! ScatterBlock(Array(6f), 3, 0, 0, 0)
-      expectReduce(ReduceBlock(Array(12f), 0, 0, 0, 0))
-      expectReduce(ReduceBlock(Array(12f), 0, 1, 0, 0))
-      expectReduce(ReduceBlock(Array(12f), 0, 2, 0, 0))
-      expectReduce(ReduceBlock(Array(12f), 0, 3, 0, 0))
+      expectReduce(ReduceBlock(Array(12f), 0, 0, 0, 0, 3))
+      expectReduce(ReduceBlock(Array(12f), 0, 1, 0, 0, 3))
+      expectReduce(ReduceBlock(Array(12f), 0, 2, 0, 0, 3))
+      expectReduce(ReduceBlock(Array(12f), 0, 3, 0, 0, 3))
       worker ! StartAllreduce(1) // master call it to do round 1
       worker ! ScatterBlock(Array(3f), 1, 0, 0, 1)
       worker ! ScatterBlock(Array(5f), 2, 0, 0, 1)
@@ -512,18 +512,18 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       expectScatter(ScatterBlock(Array(2f), 0, 1, 0, 1))
       expectScatter(ScatterBlock(Array(3f), 0, 2, 0, 1))
       expectScatter(ScatterBlock(Array(4f), 0, 3, 0, 1))
-      expectReduce(ReduceBlock(Array(15f), 0, 0, 0, 1))
-      expectReduce(ReduceBlock(Array(15f), 0, 1, 0, 1))
-      expectReduce(ReduceBlock(Array(15f), 0, 2, 0, 1))
-      expectReduce(ReduceBlock(Array(15f), 0, 3, 0, 1))
+      expectReduce(ReduceBlock(Array(15f), 0, 0, 0, 1, 3))
+      expectReduce(ReduceBlock(Array(15f), 0, 1, 0, 1, 3))
+      expectReduce(ReduceBlock(Array(15f), 0, 2, 0, 1, 3))
+      expectReduce(ReduceBlock(Array(15f), 0, 3, 0, 1, 3))
       println("finishing the reduce part")
       // assertion: reduce t would never come after reduce t+1. (FIFO of message) otherwise would fail!
-      worker ! ReduceBlock(Array(11f), 1, 0, 0, 0)
-      worker ! ReduceBlock(Array(11f), 1, 0, 0, 1)
-      worker ! ReduceBlock(Array(10f), 2, 0, 0, 0)
-      worker ! ReduceBlock(Array(10f), 2, 0, 0, 1)
-      worker ! ReduceBlock(Array(9f), 3, 0, 0, 0)
-      worker ! ReduceBlock(Array(9f), 3, 0, 0, 1)
+      worker ! ReduceBlock(Array(11f), 1, 0, 0, 0, 3)
+      worker ! ReduceBlock(Array(11f), 1, 0, 0, 1, 3)
+      worker ! ReduceBlock(Array(10f), 2, 0, 0, 0, 3)
+      worker ! ReduceBlock(Array(10f), 2, 0, 0, 1, 3)
+      worker ! ReduceBlock(Array(9f), 3, 0, 0, 0, 3)
+      worker ! ReduceBlock(Array(9f), 3, 0, 0, 1, 3)
       expectMsg(CompleteAllreduce(0, 0))
       expectMsg(CompleteAllreduce(0, 1))
     }
@@ -548,9 +548,9 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
         expectBasicSendingScatterBlock(worker, i)
 
         simulateScatterBlocksFromPeers(worker, i)
-        worker ! ReduceBlock(Array(12.0f, 12.0f), 1, 0, 0, i)
-        worker ! ReduceBlock(Array(12.0f, 12.0f), 2, 0, 0, i)
-        worker ! ReduceBlock(Array(12.0f, 12.0f), 3, 0, 0, i)
+        worker ! ReduceBlock(Array(12.0f, 12.0f), 1, 0, 0, i, 4)
+        worker ! ReduceBlock(Array(12.0f, 12.0f), 2, 0, 0, i, 4)
+        worker ! ReduceBlock(Array(12.0f, 12.0f), 3, 0, 0, i, 4)
       }
 
       testCatchup(worker, maxLag, catchupRound = 6)
@@ -572,10 +572,10 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       worker ! StartAllreduce(10) // trigger the problem instantly
       // NOTE: here we need to nullify the reduce message instead.
       for (i <- 0 until 5) {
-        expectReduce(ReduceBlock(Array(0f, 0f), 0, 0, 0, i))
-        expectReduce(ReduceBlock(Array(0f, 0f), 0, 1, 0, i))
-        expectReduce(ReduceBlock(Array(0f, 0f), 0, 2, 0, i))
-        expectReduce(ReduceBlock(Array(0f, 0f), 0, 3, 0, i))
+        expectReduce(ReduceBlock(Array(0f, 0f), 0, 0, 0, i, 0))
+        expectReduce(ReduceBlock(Array(0f, 0f), 0, 1, 0, i, 0))
+        expectReduce(ReduceBlock(Array(0f, 0f), 0, 2, 0, i, 0))
+        expectReduce(ReduceBlock(Array(0f, 0f), 0, 3, 0, i, 0))
         expectMsg(CompleteAllreduce(0, i))
       }
       for (i <- 0 to 10) {
@@ -634,12 +634,12 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       worker ! ScatterBlock(Array(2f), 1, 0, 1, 0)
       worker ! ScatterBlock(Array(2f), 2, 0, 1, 0)
 
-      expectReduce(ReduceBlock(Array(0f, 2f), 0, 0, 0, 0))
-      expectReduce(ReduceBlock(Array(0f, 2f), 0, 1, 0, 0))
-      expectReduce(ReduceBlock(Array(0f, 2f), 0, 2, 0, 0))
-      expectReduce(ReduceBlock(Array(4f), 0, 0, 1, 0))
-      expectReduce(ReduceBlock(Array(4f), 0, 1, 1, 0))
-      expectReduce(ReduceBlock(Array(4f), 0, 2, 1, 0))
+      expectReduce(ReduceBlock(Array(0f, 2f), 0, 0, 0, 0, 2))
+      expectReduce(ReduceBlock(Array(0f, 2f), 0, 1, 0, 0, 2))
+      expectReduce(ReduceBlock(Array(0f, 2f), 0, 2, 0, 0, 2))
+      expectReduce(ReduceBlock(Array(4f), 0, 0, 1, 0, 2))
+      expectReduce(ReduceBlock(Array(4f), 0, 1, 1, 0, 2))
+      expectReduce(ReduceBlock(Array(4f), 0, 2, 1, 0, 2))
 
       worker ! StartAllreduce(1) // master call it to do round 1
       worker ! ScatterBlock(Array(10f, 11f), 1, 0, 0, 1)
@@ -655,25 +655,25 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       expectScatter(ScatterBlock(Array(7f, 8f), 0, 2, 0, 1))
       expectScatter(ScatterBlock(Array(9f), 0, 2, 1, 1))
 
-      expectReduce(ReduceBlock(Array(20f, 22f), 0, 0, 0, 1))
-      expectReduce(ReduceBlock(Array(20f, 22f), 0, 1, 0, 1))
-      expectReduce(ReduceBlock(Array(20f, 22f), 0, 2, 0, 1))
-      expectReduce(ReduceBlock(Array(24f), 0, 0, 1, 1))
-      expectReduce(ReduceBlock(Array(24f), 0, 1, 1, 1))
-      expectReduce(ReduceBlock(Array(24f), 0, 2, 1, 1))
+      expectReduce(ReduceBlock(Array(20f, 22f), 0, 0, 0, 1, 2))
+      expectReduce(ReduceBlock(Array(20f, 22f), 0, 1, 0, 1, 2))
+      expectReduce(ReduceBlock(Array(20f, 22f), 0, 2, 0, 1, 2))
+      expectReduce(ReduceBlock(Array(24f), 0, 0, 1, 1, 2))
+      expectReduce(ReduceBlock(Array(24f), 0, 1, 1, 1, 2))
+      expectReduce(ReduceBlock(Array(24f), 0, 2, 1, 1, 2))
       println("finishing the reduce part")
 
       // assertion: reduce t would never come after reduce t+1. (FIFO of message) otherwise would fail!
-      worker ! ReduceBlock(Array(11f, 11f), 1, 0, 0, 0)
-      worker ! ReduceBlock(Array(11f), 1, 0, 1, 1)
-      worker ! ReduceBlock(Array(11f, 11f), 1, 0, 0, 1)
-      worker ! ReduceBlock(Array(11f), 1, 0, 1, 0)
-      worker ! ReduceBlock(Array(11f, 11f), 2, 0, 0, 0)
-      worker ! ReduceBlock(Array(11f), 2, 0, 1, 1)
+      worker ! ReduceBlock(Array(11f, 11f), 1, 0, 0, 0, 2)
+      worker ! ReduceBlock(Array(11f), 1, 0, 1, 1, 2)
+      worker ! ReduceBlock(Array(11f, 11f), 1, 0, 0, 1, 2)
+      worker ! ReduceBlock(Array(11f), 1, 0, 1, 0, 2)
+      worker ! ReduceBlock(Array(11f, 11f), 2, 0, 0, 0, 2)
+      worker ! ReduceBlock(Array(11f), 2, 0, 1, 1, 2)
       expectNoMsg()
-      worker ! ReduceBlock(Array(11f, 11f), 2, 0, 0, 1)
+      worker ! ReduceBlock(Array(11f, 11f), 2, 0, 0, 1, 2)
       expectMsg(CompleteAllreduce(0, 1))
-      worker ! ReduceBlock(Array(11f), 2, 0, 1, 0)
+      worker ! ReduceBlock(Array(11f), 2, 0, 1, 0, 2)
       expectMsg(CompleteAllreduce(0, 0))
 
     }
@@ -705,10 +705,10 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
   }
 
   private def expectBasicSendingReduceBlock(i: Int) = {
-    expectReduce(ReduceBlock(Array(7.0f * (i + 1), 7.0f * (i + 1)), 0, 0, 0, i))
-    expectReduce(ReduceBlock(Array(7.0f * (i + 1), 7.0f * (i + 1)), 0, 1, 0, i))
-    expectReduce(ReduceBlock(Array(7.0f * (i + 1), 7.0f * (i + 1)), 0, 2, 0, i))
-    expectReduce(ReduceBlock(Array(7.0f * (i + 1), 7.0f * (i + 1)), 0, 3, 0, i))
+    expectReduce(ReduceBlock(Array(7.0f * (i + 1), 7.0f * (i + 1)), 0, 0, 0, i, 3))
+    expectReduce(ReduceBlock(Array(7.0f * (i + 1), 7.0f * (i + 1)), 0, 1, 0, i, 3))
+    expectReduce(ReduceBlock(Array(7.0f * (i + 1), 7.0f * (i + 1)), 0, 2, 0, i, 3))
+    expectReduce(ReduceBlock(Array(7.0f * (i + 1), 7.0f * (i + 1)), 0, 3, 0, i, 3))
   }
 
 
@@ -739,6 +739,7 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
         r.round shouldEqual expected.round
         r.value.toList shouldEqual expected.value.toList
         r.chunkId shouldEqual expected.chunkId
+        r.count shouldEqual expected.count
     }
   }
 
