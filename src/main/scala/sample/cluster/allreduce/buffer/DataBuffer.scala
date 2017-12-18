@@ -24,7 +24,7 @@ case class DataBuffer(dataSize: Int,
     }
   }
 
-  private var countFilled: Array[Array[Int]] = Array.ofDim[Int](maxLag, numChunks)
+  private val countFilled: Array[Array[Int]] = Array.ofDim[Int](maxLag, numChunks)
   private val minRequired: Int = (threshold * peerSize).toInt
   private val minChunksRequired: Int = (threshold * peerSize * numChunks).toInt
 

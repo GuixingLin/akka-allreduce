@@ -30,7 +30,6 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
   var reduceBlockBuf: DataBuffer = DataBuffer.empty // store reduced data received
   var maxChunkSize = 1024; // maximum msg size that is allowed on the wire
   var myNumChunks = 0
-  var maxNumChunks = 0;
 
   def receive = {
 
@@ -54,7 +53,6 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
 
       maxChunkSize = init.maxChunkSize
       myNumChunks = math.ceil(1f * myBlockSize / maxChunkSize).toInt
-      maxNumChunks = math.ceil(1f * maxBlockSize / maxChunkSize).toInt
 
       scatterBlockBuf = DataBuffer(
         dataSize = myBlockSize,
@@ -132,10 +130,14 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
         log.warning(s"\n----Have not initialized!")
         self ! r
       } else {
-        assert(r.value.size <= maxChunkSize, s"Reduced block of size ${r.value.size} is larger than expected.. Max msg size is $maxChunkSize")
-        assert(r.destId == id)
+
+        if (r.value.size > maxChunkSize) {
+          throw new RuntimeException(s"Reduced block of size ${r.value.size} is larger than expected.. Max msg size is $maxChunkSize")
+        } else if (r.destId != id) {
+          throw new RuntimeException(s"Message with destination ${r.destId} was incorrectly routed to node $id")
+        }
         if (r.round < round || completed.contains(r.round)) {
-          log.warning(s"\n----Outdated reduced data")
+          log.debug(s"\n----Outdated reduced data")
         } else if (r.round <= maxRound) {
           val row = r.round - round
           reduceBlockBuf.store(r.value, row, r.srcId, r.chunkId)
