@@ -29,7 +29,6 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
   var scatterBlockBuf: DataBuffer = DataBuffer.empty // store scattered data received
   var reduceBlockBuf: DataBuffer = DataBuffer.empty // store reduced data received
   var maxChunkSize = 1024; // maximum msg size that is allowed on the wire
-  var myNumChunks = 0
 
   def receive = {
 
@@ -52,7 +51,6 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
       maxBlockSize = blockSize(0)
 
       maxChunkSize = init.maxChunkSize
-      myNumChunks = math.ceil(1f * myBlockSize / maxChunkSize).toInt
 
       scatterBlockBuf = DataBuffer(
         dataSize = myBlockSize,
@@ -87,7 +85,7 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
       } else {
         maxRound = math.max(maxRound, s.round)
         while (round < maxRound - maxLag) { // fall behind too much, catch up
-          for (k <-0 until myNumChunks){
+          for (k <-0 until scatterBlockBuf.numChunks) {
             val (reducedData, reduceCount) = reduce(0, k)
             broadcast(reducedData, k, round, reduceCount)
           }
@@ -199,7 +197,7 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
       val worker = peers.get(idx).get
       val dataBlock = getDataBlock(idx)
       //Partition the dataBlock if it is too big
-      for (i <- 0 until myNumChunks) {
+      for (i <- 0 until scatterBlockBuf.numChunks) {
         val chunkStart = math.min(i * maxChunkSize, dataBlock.length - 1);
         val chunkEnd = math.min((i + 1) * maxChunkSize - 1, dataBlock.length - 1);
         val chunk = new Array[Float](chunkEnd - chunkStart + 1);

@@ -32,7 +32,7 @@ case class DataBuffer(dataSize: Int,
     countFilled((row+temporalOffset)%maxLag)(chunkId) == minRequired
   }
 
-  def store(data: Array[Float], row: Int, srcId: Int, chunkId: Int, pos: Int = 0) = {
+  def store(data: Array[Float], row: Int, srcId: Int, chunkId: Int) = {
     val array = temporalBuffer((row+temporalOffset)%maxLag)(srcId)
     System.arraycopy(
       data, 0,
@@ -51,8 +51,8 @@ case class DataBuffer(dataSize: Int,
   }
 
   def get(row: Int, chunkId: Int): (Buffer, Int) = {
-    var endPos = math.min(dataSize, (chunkId + 1) * maxChunkSize)
-    var length = endPos - chunkId * maxChunkSize
+    val endPos = math.min(dataSize, (chunkId + 1) * maxChunkSize)
+    val length = endPos - chunkId * maxChunkSize
     var output: Array[Array[Float]] = Array.empty
     for (i <- 0 until temporalBuffer(row).length){
       output :+= temporalBuffer((row+temporalOffset)%maxLag)(i).slice(chunkId * maxChunkSize, endPos)
