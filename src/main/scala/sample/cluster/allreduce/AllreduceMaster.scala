@@ -1,9 +1,8 @@
 package sample.cluster.allreduce
-import akka.event.Logging
 import akka.Done
 import akka.actor.{Actor, ActorRef, ActorSystem, Props, RootActorPath, Terminated}
-import akka.cluster.ClusterEvent.{CurrentClusterState, MemberUp}
-import akka.cluster.{Cluster, Member, MemberStatus}
+import akka.cluster.ClusterEvent.MemberUp
+import akka.cluster.{Cluster, Member}
 import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 
@@ -103,7 +102,7 @@ object AllreduceMaster {
     // Override the configuration of the port when specified as program argument
     
     val thAllreduce = 1f
-    val thReduce = 0.9f
+    val thReduce = 1f
     val thComplete = 0.8f
     val maxLag = 1
     val maxRound = 100

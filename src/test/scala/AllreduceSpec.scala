@@ -34,11 +34,12 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
     }
   }
 
-  def assertiveDataSink(expected: List[List[Float]], iterations: List[Int]): DataSink = {
+  def assertiveDataSink(expectedOutput: List[List[Float]], expectedCount: List[List[Int]], iterations: List[Int]): DataSink = {
     r => {
       val pos = iterations.indexOf(r.iteration)
       pos should be >= 0
-      r.data.toList shouldBe expected(pos)
+      r.data.toList shouldBe expectedOutput(pos)
+      r.count.toList shouldBe expectedCount(pos)
     }
   }
 
@@ -52,15 +53,20 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
     val maxMsgSize = 2
     val numActors = 2
 
-    val generator = (idx: Int, iter: Int) => idx + iter.toFloat
 
     "sum up all correct data" in {
 
+      val generator = (idx: Int, iter: Int) => idx + iter.toFloat
       val source = createCustomDataSource(dataSize)(generator)
 
       val output1 = Array.range(0, dataSize).map(generator(_, 0)).map(_ * numActors).toList
       val output2 = Array.range(0, dataSize).map(generator(_, 1)).map(_ * numActors).toList
-      val sink = assertiveDataSink(List(output1, output2), List(0, 1))
+
+      val counts = List(2, 2, 2)
+      val sink = assertiveDataSink(
+        expectedOutput = List(output1, output2),
+        expectedCount = List(counts, counts),
+        List(0, 1))
 
 
       val worker = createNewWorker(source, sink)
@@ -71,18 +77,21 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxMsgSize)
 
       worker ! StartAllreduce(0)
-      worker ! ScatterBlock(Array(2f), srcId = 0, destId = 1, chunkId = 0, 0)
-      worker ! ReduceBlock(Array(0f, 2f), srcId = 0, destId = 1, chunkId =0, 0, count=2)
+      worker ! ScatterBlock(Array(2f), srcId = 0, destId = 1, chunkId = 0, round=0)
+      worker ! ReduceBlock(Array(0f, 2f), srcId = 0, destId = 1, chunkId =0, round=0, count=2)
 
       worker ! StartAllreduce(1)
-      worker ! ScatterBlock(Array(3f), srcId = 0, destId = 1, chunkId = 0, 1)
-      worker ! ReduceBlock(Array(2f, 4f), srcId = 0, destId = 1, chunkId =0, 1, count=2)
+      worker ! ScatterBlock(Array(3f), srcId = 0, destId = 1, chunkId = 0, round=1)
+      worker ! ReduceBlock(Array(2f, 4f), srcId = 0, destId = 1, chunkId =0, round=1, count=2)
 
       fishForMessage() {
         case CompleteAllreduce(1, 0) => true
         case _ => false
       }
-      expectMsg(CompleteAllreduce(1, 1))
+      fishForMessage() {
+        case CompleteAllreduce(1, 1) => true
+        case _ => false
+      }
     }
 
   }
@@ -100,8 +109,6 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
     val worker = createNewWorker(source, sink)
     val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(numActors)
     val futureRound = 3
-
-
 
     "send complete to master" in {
 

@@ -2,7 +2,7 @@ package sample.cluster.allreduce
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props, Terminated}
 import com.typesafe.config.ConfigFactory
-import sample.cluster.allreduce.buffer.DataBuffer
+import sample.cluster.allreduce.buffer.{ReducedDataBuffer, ScatteredDataBuffer}
 
 import scala.language.postfixOps
 
@@ -26,11 +26,9 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
   var dataRange: Array[Int] = Array.empty
   var maxBlockSize = 0
   var myBlockSize = 0
-  var scatterBlockBuf: DataBuffer = DataBuffer.empty // store scattered data received
-  var reduceBlockBuf: DataBuffer = DataBuffer.empty // store reduced data received
+  var scatterBlockBuf: ScatteredDataBuffer = ScatteredDataBuffer.empty // store scattered data received
+  var reduceBlockBuf: ReducedDataBuffer = ReducedDataBuffer.empty // store reduced data received
   var maxChunkSize = 1024; // maximum msg size that is allowed on the wire
-  var myNumChunks = 0
-  var maxNumChunks = 0;
 
   def receive = {
 
@@ -53,22 +51,20 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
       maxBlockSize = blockSize(0)
 
       maxChunkSize = init.maxChunkSize
-      myNumChunks = math.ceil(1f * myBlockSize / maxChunkSize).toInt
-      maxNumChunks = math.ceil(1f * maxBlockSize / maxChunkSize).toInt
 
-      scatterBlockBuf = DataBuffer(
+      scatterBlockBuf = ScatteredDataBuffer(
         dataSize = myBlockSize,
         peerSize = peers.size,
         maxLag = maxLag + 1,
-        threshold = thReduce,
+        reducingThreshold = thReduce,
         maxChunkSize = maxChunkSize
       )
 
-      reduceBlockBuf = DataBuffer(
+      reduceBlockBuf = ReducedDataBuffer(
         dataSize = maxBlockSize,
         peerSize = peers.size,
         maxLag = maxLag + 1,
-        threshold = thComplete,
+        completionThreshold = thComplete,
         maxChunkSize = maxChunkSize
       )
 
@@ -89,8 +85,8 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
       } else {
         maxRound = math.max(maxRound, s.round)
         while (round < maxRound - maxLag) { // fall behind too much, catch up
-          for (k <-0 until myNumChunks){
-            val (reducedData, reduceCount) = reduce(0, k)
+          for (k <-0 until scatterBlockBuf.numChunks) {
+            val (reducedData, reduceCount) = scatterBlockBuf.reduce(0, k)
             broadcast(reducedData, k, round, reduceCount)
           }
           complete(round, 0)
@@ -115,9 +111,9 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
         } else if (s.round <= maxRound) {
           val row = s.round - round
           scatterBlockBuf.store(s.value, row, s.srcId, s.chunkId)
-          if(scatterBlockBuf.reachThreshold(row, s.chunkId)) {
+          if(scatterBlockBuf.reachReducingThreshold(row, s.chunkId)) {
             log.debug(s"\n----receive ${scatterBlockBuf.count(row, s.chunkId)} scattered data (numPeers = ${peers.size}), chunkId =${s.chunkId} for round ${s.round}, start reducing")
-            val (reducedData, reduceCount) = reduce(row, s.chunkId)
+            val (reducedData, reduceCount) = scatterBlockBuf.reduce(row, s.chunkId)
             broadcast(reducedData, s.chunkId, s.round, reduceCount)
           }
         } else {
@@ -132,14 +128,18 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
         log.warning(s"\n----Have not initialized!")
         self ! r
       } else {
-        assert(r.value.size <= maxChunkSize, s"Reduced block of size ${r.value.size} is larger than expected.. Max msg size is $maxChunkSize")
-        assert(r.destId == id)
+
+        if (r.value.size > maxChunkSize) {
+          throw new RuntimeException(s"Reduced block of size ${r.value.size} is larger than expected.. Max msg size is $maxChunkSize")
+        } else if (r.destId != id) {
+          throw new RuntimeException(s"Message with destination ${r.destId} was incorrectly routed to node $id")
+        }
         if (r.round < round || completed.contains(r.round)) {
-          log.warning(s"\n----Outdated reduced data")
+          log.debug(s"\n----Outdated reduced data")
         } else if (r.round <= maxRound) {
           val row = r.round - round
-          reduceBlockBuf.store(r.value, row, r.srcId, r.chunkId)
-          if (reduceBlockBuf.reachRoundThreshold(row)) {
+          reduceBlockBuf.store(r.value, row, r.srcId, r.chunkId, r.count)
+          if (reduceBlockBuf.reachCompletionThreshold(row)) {
             log.debug(s"\n----Receive enough reduced data (numPeers = ${peers.size} for round ${r.round}, complete")
             complete(r.round, row)
           }
@@ -178,17 +178,9 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
   }
 
   private def flush(completedRound: Int, row: Int) = {
-
-    val output: Array[Array[Float]] = reduceBlockBuf.get(row)
-    val dataOutput = Array.fill[Float](dataSize)(0.0f)
-    var transferred = 0
-    for (chunk <- output) {
-      val chunkSize = Math.min(dataSize - transferred, chunk.size)
-      System.arraycopy(chunk, 0, dataOutput, transferred, chunkSize)
-      transferred += chunkSize
-    }
-    log.info(s"\n----Flushing ${dataOutput.toList} at completed round $completedRound")
-    dataSink(AllReduceOutput(dataOutput, Array(0), completedRound))
+    val (output, counts) = reduceBlockBuf.getWithCounts(row, totalSize = dataSize)
+    log.info(s"\n----Flushing ${output.toList} with counts ${counts.toList} at completed round $completedRound")
+    dataSink(AllReduceOutput(output, counts, completedRound))
   }
 
   private def scatter() = {
@@ -197,7 +189,7 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
       val worker = peers.get(idx).get
       val dataBlock = getDataBlock(idx)
       //Partition the dataBlock if it is too big
-      for (i <- 0 until myNumChunks) {
+      for (i <- 0 until scatterBlockBuf.numChunks) {
         val chunkStart = math.min(i * maxChunkSize, dataBlock.length - 1);
         val chunkEnd = math.min((i + 1) * maxChunkSize - 1, dataBlock.length - 1);
         val chunk = new Array[Float](chunkEnd - chunkStart + 1);
@@ -235,19 +227,6 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
         log.debug(s"\n----Broadcast data:${data.toList}, src: ${id}, dest: ${idx}, chunkId: ${chunkId}, round: ${bcastRound}")
         worker ! ReduceBlock(data, id, idx, chunkId, bcastRound, reduceCount)
     }
-  }
-
-  private def reduce(row : Int, chunkId: Int) : (Array[Float],Int) = {
-    log.debug(s"\n----Start reducing")
-    val count = scatterBlockBuf.count(row, chunkId)
-    val (unreduced, unreducedChunkSize) = scatterBlockBuf.get(row, chunkId)
-    val reduced = initArray(unreducedChunkSize)
-    for (i <- 0 until scatterBlockBuf.peerSize) {
-      for (j <- 0 until unreducedChunkSize) {
-        reduced(j) += unreduced(i)(j)
-      }
-    }
-    return (reduced, count)
   }
 
   private def complete(completedRound: Int, row: Int) = {
