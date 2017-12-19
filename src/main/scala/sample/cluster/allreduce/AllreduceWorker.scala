@@ -138,7 +138,7 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
           log.debug(s"\n----Outdated reduced data")
         } else if (r.round <= maxRound) {
           val row = r.round - round
-          reduceBlockBuf.store(r.value, row, r.srcId, r.chunkId)
+          reduceBlockBuf.storeWithCount(r.value, row, r.srcId, r.chunkId, r.count)
           if (reduceBlockBuf.reachRoundThreshold(row)) {
             log.debug(s"\n----Receive enough reduced data (numPeers = ${peers.size} for round ${r.round}, complete")
             complete(r.round, row)
@@ -179,16 +179,10 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
 
   private def flush(completedRound: Int, row: Int) = {
 
-    val output: Array[Array[Float]] = reduceBlockBuf.get(row)
-    val dataOutput = Array.fill[Float](dataSize)(0.0f)
-    var transferred = 0
-    for (chunk <- output) {
-      val chunkSize = Math.min(dataSize - transferred, chunk.size)
-      System.arraycopy(chunk, 0, dataOutput, transferred, chunkSize)
-      transferred += chunkSize
-    }
-    log.info(s"\n----Flushing ${dataOutput.toList} at completed round $completedRound")
-    dataSink(AllReduceOutput(dataOutput, Array(0), completedRound))
+    val (output, counts) = reduceBlockBuf.getAll(row, totalSize = dataSize)
+
+    log.info(s"\n----Flushing ${output.toList} at completed round $completedRound")
+    dataSink(AllReduceOutput(output, counts, completedRound))
   }
 
   private def scatter() = {

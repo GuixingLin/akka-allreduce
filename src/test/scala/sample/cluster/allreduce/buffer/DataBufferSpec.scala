@@ -16,6 +16,7 @@ class DataBufferSpec extends WordSpec with Matchers {
     val maxChunkSize = 2
 
     val rowAtTest = 1
+    val count = 2
 
     val buffer = DataBuffer(dataSize, peerSize, maxLag, threshold, maxChunkSize)
 
@@ -41,7 +42,7 @@ class DataBufferSpec extends WordSpec with Matchers {
       val srcId = 0
       val chunkId = 0
       val toStore: Array[Float] = randomFloatArray(maxChunkSize)
-      buffer.store(toStore, rowAtTest, srcId, chunkId)
+      buffer.storeWithCount(toStore, rowAtTest, srcId, chunkId, count = peerSize)
       buffer.count(rowAtTest, chunkId) shouldEqual 1
 
     }
@@ -51,12 +52,12 @@ class DataBufferSpec extends WordSpec with Matchers {
       val chunkId = buffer.numChunks - 1
       intercept[ArrayIndexOutOfBoundsException] {
         val toStore: Array[Float] = randomFloatArray(maxChunkSize)
-        buffer.store(toStore, rowAtTest, srcId, chunkId)
+        buffer.storeWithCount(toStore, rowAtTest, srcId, chunkId, count = peerSize)
       }
 
       val lastChunkSize = dataSize - (buffer.numChunks - 1) * maxChunkSize
       val toStore: Array[Float] = randomFloatArray(lastChunkSize)
-      buffer.store(toStore, rowAtTest, srcId, chunkId)
+      buffer.storeWithCount(toStore, rowAtTest, srcId, chunkId, count = peerSize)
       buffer.count(rowAtTest, chunkId) shouldEqual 1
     }
 
@@ -68,16 +69,16 @@ class DataBufferSpec extends WordSpec with Matchers {
       // 0.7 * 3 * 3 - (threshold * peer size * num chunks)
 
       // peer 0, second chunk
-      buffer.store(randomFloatArray(maxChunkSize), row = 1, srcId = 0, chunkId = 1)
+      buffer.storeWithCount(randomFloatArray(maxChunkSize), row = 1, srcId = 0, chunkId = 1, count = peerSize)
       buffer.reachRoundThreshold(rowAtTest) shouldBe false
 
       // peer 1, first, second chunk
-      buffer.store(randomFloatArray(maxChunkSize), row = 1, srcId = 1, chunkId = 0)
-      buffer.store(randomFloatArray(maxChunkSize), row = 1, srcId = 1, chunkId = 1)
+      buffer.storeWithCount(randomFloatArray(maxChunkSize), row = 1, srcId = 1, chunkId = 0, count = peerSize)
+      buffer.storeWithCount(randomFloatArray(maxChunkSize), row = 1, srcId = 1, chunkId = 1, count = peerSize)
       buffer.reachRoundThreshold(rowAtTest) shouldBe false
 
       // peer 2, second chunk
-      buffer.store(randomFloatArray(maxChunkSize), row = 1, srcId = 2, chunkId = 1)
+      buffer.storeWithCount(randomFloatArray(maxChunkSize), row = 1, srcId = 2, chunkId = 1, count = peerSize)
       buffer.reachRoundThreshold(rowAtTest) shouldBe true
 
     }
@@ -87,12 +88,27 @@ class DataBufferSpec extends WordSpec with Matchers {
       // peer 0 - missing 3rd chunk
       // peer 1 - missing 3rd chunk
       // peer 2 - missing 1st chunk
+      val totalSize = 15
 
-      val reducedRowsInPeerOrder = buffer.get(rowAtTest)
-      reducedRowsInPeerOrder(0)(4) shouldEqual 0
-      reducedRowsInPeerOrder(1)(4) shouldEqual 0
-      reducedRowsInPeerOrder(2)(0) shouldEqual 0
-      reducedRowsInPeerOrder(2)(1) shouldEqual 0
+      val (reduced, counts) = buffer.getAll(rowAtTest, totalSize)
+      reduced.size shouldEqual counts.size
+
+      val missingIndex = List(4, 9, 10, 11)
+      for (i <- missingIndex) {
+        reduced(i) shouldEqual 0
+      }
+
+
+      // count is zero when data is missing
+      for (i <- missingIndex) {
+        counts(i) shouldEqual 0
+      }
+
+      val presentIndex = (0 until totalSize).filterNot(missingIndex.contains)
+      for (i <- presentIndex) {
+        counts(i) shouldEqual peerSize
+      }
+
     }
 
   }
