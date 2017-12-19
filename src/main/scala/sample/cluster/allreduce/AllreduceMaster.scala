@@ -102,7 +102,7 @@ object AllreduceMaster {
     // Override the configuration of the port when specified as program argument
     
     val thAllreduce = 1f
-    val thReduce = 0.9f
+    val thReduce = 1f
     val thComplete = 0.8f
     val maxLag = 1
     val maxRound = 100
