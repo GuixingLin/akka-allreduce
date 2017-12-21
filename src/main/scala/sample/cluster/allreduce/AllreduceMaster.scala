@@ -83,7 +83,7 @@ class AllreduceMaster(
     private def init_workers() = {
       for ((idx, worker) <- workers) {
         log.info(s"\n----Init worker $idx $worker")
-        worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
+        worker ! InitWorkers(workers, totalWorkers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       }
     }
 

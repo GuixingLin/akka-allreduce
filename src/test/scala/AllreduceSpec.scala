@@ -51,7 +51,7 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
     val maxLag = 5
     val dataSize = 3
     val maxMsgSize = 2
-    val numActors = 2
+    val workerNum = 2
 
 
     "sum up all correct data" in {
@@ -59,8 +59,8 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       val generator = (idx: Int, iter: Int) => idx + iter.toFloat
       val source = createCustomDataSource(dataSize)(generator)
 
-      val output1 = Array.range(0, dataSize).map(generator(_, 0)).map(_ * numActors).toList
-      val output2 = Array.range(0, dataSize).map(generator(_, 1)).map(_ * numActors).toList
+      val output1 = Array.range(0, dataSize).map(generator(_, 0)).map(_ * workerNum).toList
+      val output2 = Array.range(0, dataSize).map(generator(_, 1)).map(_ * workerNum).toList
 
       val counts = List(2, 2, 2)
       val sink = assertiveDataSink(
@@ -72,9 +72,9 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       val worker = createNewWorker(source, sink)
 
       // Replace test actor with the worker itself, it can actually send message to self - not intercepted by testactor
-      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(numActors).updated(idx, worker)
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(workerNum).updated(idx, worker)
 
-      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxMsgSize)
+      worker ! InitWorkers(workers, workerNum, self, idx, thReduce, thComplete, maxLag, dataSize, maxMsgSize)
 
       worker ! StartAllreduce(0)
       worker ! ScatterBlock(Array(2f), srcId = 0, destId = 1, chunkId = 0, round=0)
@@ -103,16 +103,16 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
     val thComplete = 0.8f
     val maxLag = 5
     val dataSize = 8
-    val maxMsgSize = 2;
-    val numActors = 4;
+    val maxMsgSize = 2
+    val workerNum = 4
 
     val worker = createNewWorker(source, sink)
-    val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(numActors)
+    val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(workerNum)
     val futureRound = 3
 
     "send complete to master" in {
 
-      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxMsgSize)
+      worker ! InitWorkers(workers, workerNum, self, idx, thReduce, thComplete, maxLag, dataSize, maxMsgSize)
       worker ! StartAllreduce(0)
 
       worker ! ReduceBlock(Array(12f, 15f), 0, 0, 0, futureRound, count = 4)
@@ -138,20 +138,53 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
     }
   }
 
+  "Nodes are live at different times" must {
+
+    val idx = 0
+    val thReduce = 1f
+    val thComplete = 1f
+    val maxLag = 5
+    val dataSize = 8
+    val maxMsgSize = 2
+    val workerNum = 4
+
+    val worker = createNewWorker(source, sink)
+    val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(workerNum)
+
+    val incompleteWorkers = Map(0 -> workers(0))
+
+    "only send one scatter" in {
+      worker ! InitWorkers(incompleteWorkers, workerNum, self, idx, thReduce, thComplete, maxLag, dataSize, maxMsgSize)
+      worker ! StartAllreduce(0)
+
+      expectScatter(ScatterBlock(Array(0f, 1f), srcId = 0, destId = 0, 0, round=0))
+      expectNoMsg()
+    }
+
+    "send all scatters after all peers joined" in {
+      worker ! InitWorkers(workers, workerNum, self, idx, thReduce, thComplete, maxLag, dataSize, maxMsgSize)
+      worker ! StartAllreduce(1)
+      for (i <- 0 until 4) {
+        expectScatter(ScatterBlock(Array(2f * i + 1, 2f * i + 2), srcId = 0, destId = i, 0, round=1))
+      }
+    }
+
+  }
 
   "Allreduce worker" must {
     "single-round allreduce" in {
       val worker = createNewWorker(source, sink)
-      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
+      val workerNum = 4
+
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(workerNum)
       val idx = 0
       val thReduce = 1f
       val thComplete = 0.75f
       val maxLag = 5
       val dataSize = 8
       val maxChunkSize = 2
-      val numActors = 4
 
-      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
+      worker ! InitWorkers(workers, workerNum, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       println("============start normal test!===========")
       worker ! StartAllreduce(0)
 
@@ -182,15 +215,18 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
     "uneven size sending to self first" in {
 
       val dataSize = 3
+
       val worker = createNewWorker(createBasicDataSource(dataSize), sink)
-      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(2)
+      val workerNum = 2
+
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(workerNum)
       val idx = 1
       val thReduce = 1
       val thComplete = 1
       val maxLag = 1
       val maxChunkSize = 1
 
-      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
+      worker ! InitWorkers(workers, workerNum, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       println("============start normal test!===========")
       worker ! StartAllreduce(0)
 
@@ -205,14 +241,15 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
 
       val dataSize = 6
       val worker = createNewWorker(createBasicDataSource(dataSize), sink)
-      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(2)
+      val workerNum = 2
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(workerNum)
       val idx = 0
       val thReduce = 0.9f
       val thComplete = 0.8f
       val maxLag = 5
       val maxChunkSize = 2
 
-      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
+      worker ! InitWorkers(workers, workerNum, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       println("============start normal test!===========")
       worker ! StartAllreduce(0)
 
@@ -249,14 +286,15 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
     "single-round allreduce with nasty chunk size contd" in {
       val dataSize = 9
       val worker = createNewWorker(createBasicDataSource(dataSize), sink)
-      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(3)
+      val workerNum = 3
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(workerNum)
       val idx = 0
       val thReduce = 0.7f
       val thComplete = 0.7f
       val maxLag = 5
       val maxChunkSize = 1
 
-      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
+      worker ! InitWorkers(workers, workerNum, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       println("============start normal test!===========")
       worker ! StartAllreduce(0)
 
@@ -312,7 +350,8 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
 
     "multi-round allreduce" in {
       val worker = createNewWorker(source, sink)
-      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
+      val workerNum = 4
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(workerNum)
       val idx = 0
       val thReduce = 0.8f
       val thComplete = 0.5f
@@ -320,7 +359,7 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       val dataSize = 8
       val maxChunkSize = 2
 
-      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
+      worker ! InitWorkers(workers, workerNum, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       println("===============start multi-round test!==============")
       for (i <- 0 until 10) {
         worker ! StartAllreduce(i)
@@ -347,7 +386,8 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
 
     "multi-round allreduce v2" in {
       val worker = createNewWorker(source, sink)
-      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(2)
+      val workerNum = 2
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(workerNum)
       val idx = 0
       val thReduce = 0.6f
       val thComplete = 0.8f
@@ -355,7 +395,7 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       val dataSize = 8
       val maxChunkSize = 2
 
-      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
+      worker ! InitWorkers(workers, workerNum, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       println("===============start multi-round test!==============")
       for (i <- 0 until 10) {
         worker ! StartAllreduce(i)
@@ -382,7 +422,8 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
     }
 
     "missed scatter" in {
-      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
+      val workerNum = 4
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(workerNum)
       val idx = 0
       val thReduce = 0.75f
       val thComplete = 0.75f
@@ -391,7 +432,7 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       val maxChunkSize = 2
       val worker = createNewWorker(createBasicDataSource(dataSize), sink)
 
-      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
+      worker ! InitWorkers(workers, workerNum, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       println("===============start outdated scatter test!==============")
       worker ! StartAllreduce(0)
       expectScatter(ScatterBlock(Array(0f), 0, 0, 0, 0))
@@ -418,7 +459,8 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
     }
 
     "future scatter" in {
-      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
+      val workerNum = 4
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(workerNum)
       val idx = 0
       val thReduce = 0.75f
       val thComplete = 0.75f
@@ -426,7 +468,7 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       val dataSize = 4
       val maxChunkSize = 2
       val worker = createNewWorker(createBasicDataSource(dataSize), sink)
-      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
+      worker ! InitWorkers(workers, workerNum, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       println("===============start missing test!==============")
       worker ! StartAllreduce(0)
       expectScatter(ScatterBlock(Array(0f), 0, 0, 0, 0))
@@ -471,7 +513,8 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
     }
 
     "missed reduce" in {
-      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
+      val workerNum = 4
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(workerNum)
       val idx = 0
       val thReduce = 1f
       val thComplete = 0.75f
@@ -480,7 +523,7 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       val maxLag = 5
       val worker = createNewWorker(createBasicDataSource(dataSize), sink)
 
-      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
+      worker ! InitWorkers(workers, workerNum, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       println("===============start missing test!==============")
       worker ! StartAllreduce(0)
       expectScatter(ScatterBlock(Array(0f), 0, 0, 0, 0))
@@ -505,7 +548,8 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
     }
 
     "delayed future reduce" in {
-      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
+      val workerNum = 4
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(workerNum)
       val idx = 0
       val thReduce = 0.75f
       val thComplete = 0.75f
@@ -514,7 +558,7 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       val maxLag = 5
       val worker = createNewWorker(createBasicDataSource(4), sink)
 
-      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
+      worker ! InitWorkers(workers, workerNum, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       println("===============start delayed future reduce test!==============")
       worker ! StartAllreduce(0)
       expectScatter(ScatterBlock(Array(0f), 0, 0, 0, 0))
@@ -560,14 +604,15 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
 
     "simple catchup" in {
       val worker = createNewWorker(source, sink)
-      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
+      val workerNum = 4
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(workerNum)
       val idx = 0
       val thReduce = 1
       val thComplete = 1
       val maxLag = 5
       val dataSize = 8
       val maxChunkSize = 2
-      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
+      worker ! InitWorkers(workers, workerNum, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       println("===============start simple catchup test!==============")
       for (i <- 0 until 6) {
         worker ! StartAllreduce(i)
@@ -586,15 +631,16 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
 
     "cold catchup" in {
       // extreme case of catch up, only for test use
+      val workerNum = 4
       val worker = createNewWorker(source, sink)
-      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(4)
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(workerNum)
       val idx = 0
       val thReduce = 1
       val thComplete = 1
       val maxLag = 5
       val dataSize = 8
       val maxChunkSize = 2
-      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
+      worker ! InitWorkers(workers, workerNum, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       worker ! StartAllreduce(10) // trigger the problem instantly
       // NOTE: here we need to nullify the reduce message instead.
       for (i <- 0 until 5) {
@@ -609,24 +655,6 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       }
     }
 
-/*
-    "buffer when unitialized" in {
-
-      val worker = createNewWorker(source, sink)
-      worker ! StartAllreduce(0)
-      expectNoMsg()
-      val idx = 0
-      val thReduce = 1
-      val thComplete = 1
-      val maxLag = 5
-      val dataSize = 8
-      val maxChunkSize = 2
-      val workers = initializeWorkersAsSelf(4)
-      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
-      expectBasicSendingScatterBlock(worker, 0)
-
-    }
-*/
 
   }
 
@@ -634,7 +662,8 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
   "Sanity Check" must {
 
     "multi-round allreduce v3" in {
-      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(3)
+      val workerNum = 3
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(workerNum)
       val idx = 0
       val thReduce = 0.75f
       val thComplete = 0.75f
@@ -643,7 +672,7 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       val maxLag = 5
       val worker = createNewWorker(createBasicDataSource(dataSize), sink)
 
-      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
+      worker ! InitWorkers(workers, workerNum, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       println("===============start delayed future reduce test!==============")
       worker ! StartAllreduce(0)
       expectScatter(ScatterBlock(Array(0f, 1f), 0, 0, 0, 0))

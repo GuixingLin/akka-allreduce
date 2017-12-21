@@ -12,6 +12,7 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
   var id = -1 // node id
   var master: Option[ActorRef] = None
   var peers = Map[Int, ActorRef]() // workers in the same row/col, including self
+  var peerNum = 0
   var thReduce = 1f // pct of scattered data needed to start reducing
   var thComplete = 1f // pct of reduced data needed to complete current round
   var maxLag = 0 // number of rounds allowed for a worker to fall behind
@@ -34,52 +35,58 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
   def receive = {
 
     case init: InitWorkers =>
-      id = init.destId
-      master = Some(init.master)
-      peers = init.workers
-      thReduce = init.thReduce
-      thComplete = init.thComplete
-      maxLag = init.maxLag
-      round = 0 // clear round info to start over
-      maxRound = -1
-      maxScattered = -1
-      completed = Set[Int]()
 
-      dataSize = init.dataSize
-      data = initArray(dataSize)
-      dataRange = initDataBlockRanges()
-      myBlockSize = blockSize(id)
-      maxBlockSize = blockSize(0)
-      minBlockSize = blockSize(peers.size - 1)
+      if(id == -1) {
+        id = init.destId
+        master = Some(init.master)
+        peerNum = init.workerNum
+        peers = init.workers
+        thReduce = init.thReduce
+        thComplete = init.thComplete
+        maxLag = init.maxLag
+        round = 0 // clear round info to start over
+        maxRound = -1
+        maxScattered = -1
+        completed = Set[Int]()
 
-      maxChunkSize = init.maxChunkSize
+        dataSize = init.dataSize
+        data = initArray(dataSize)
+        dataRange = initDataBlockRanges()
+        myBlockSize = blockSize(id)
+        maxBlockSize = blockSize(0)
+        minBlockSize = blockSize(peerNum - 1)
 
-      scatterBlockBuf = ScatteredDataBuffer(
-        dataSize = myBlockSize,
-        peerSize = peers.size,
-        maxLag = maxLag + 1,
-        reducingThreshold = thReduce,
-        maxChunkSize = maxChunkSize
-      )
+        maxChunkSize = init.maxChunkSize
 
-      reduceBlockBuf = ReducedDataBuffer(
-        maxBlockSize = maxBlockSize,
-        minBlockSize = minBlockSize,
-        totalDataSize = dataSize,
-        peerSize = peers.size,
-        maxLag = maxLag + 1,
-        completionThreshold = thComplete,
-        maxChunkSize = maxChunkSize
-      )
+        scatterBlockBuf = ScatteredDataBuffer(
+          dataSize = myBlockSize,
+          peerSize = peerNum,
+          maxLag = maxLag + 1,
+          reducingThreshold = thReduce,
+          maxChunkSize = maxChunkSize
+        )
 
-      log.info(s"\n----Actor id = ${id}")
-      for (i <- 0 until peers.size) {
-        log.debug(s"\n----Peers[${i}] = ${peers(i)}")
+        reduceBlockBuf = ReducedDataBuffer(
+          maxBlockSize = maxBlockSize,
+          minBlockSize = minBlockSize,
+          totalDataSize = dataSize,
+          peerSize = peerNum,
+          maxLag = maxLag + 1,
+          completionThreshold = thComplete,
+          maxChunkSize = maxChunkSize
+        )
+
+        log.info(s"\n----Actor id = ${id}")
+        for (i <- 0 until peers.size) {
+          log.debug(s"\n----Peers[${i}] = ${peers(i)}")
+        }
+        log.info(s"\n----Number of peers / total peers = ${peers.size} / $peerNum")
+        log.info(s"\n----Thresholds: thReduce = ${thReduce}, thComplete = ${thComplete}, maxLag = ${maxLag}")
+        log.info(s"\n----Size of scatter buffer: ${scatterBlockBuf.maxLag} x ${scatterBlockBuf.peerSize} x ${scatterBlockBuf.dataSize}")
+        log.info(s"\n----Size of reduce buffer: ${reduceBlockBuf.maxLag} x ${reduceBlockBuf.peerSize} x ${reduceBlockBuf.maxBlockSize}")
+      } else {
+        peers = init.workers
       }
-      log.info(s"\n----Number of peers = ${peers.size}")
-      log.info(s"\n----Thresholds: thReduce = ${thReduce}, thComplete = ${thComplete}, maxLag = ${maxLag}")
-      log.info(s"\n----Size of scatter buffer: ${scatterBlockBuf.maxLag} x ${scatterBlockBuf.peerSize} x ${scatterBlockBuf.dataSize}")
-      log.info(s"\n----Size of reduce buffer: ${reduceBlockBuf.maxLag} x ${reduceBlockBuf.peerSize} x ${reduceBlockBuf.maxBlockSize}")
 
     case s: StartAllreduce =>
       log.info(s"\n----Start allreduce round ${s.round}")
@@ -189,24 +196,27 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
 
   private def scatter() = {
     for( i <- 0 until peers.size){
-      val idx = (i+id) % peers.size
-      val worker = peers.get(idx).get
-      val dataBlock = getDataBlock(idx)
-      //Partition the dataBlock if it is too big
-      val peerNumChunks =  math.ceil(1f * dataBlock.length / maxChunkSize).toInt
-      for (i <- 0 until peerNumChunks) {
-        val chunkStart = math.min(i * maxChunkSize, dataBlock.length - 1);
-        val chunkEnd = math.min((i + 1) * maxChunkSize - 1, dataBlock.length - 1);
-        val chunk = new Array[Float](chunkEnd - chunkStart + 1);
-        System.arraycopy(dataBlock, chunkStart, chunk, 0, chunk.length);
-        log.debug(s"\n----send msg ${chunk.toList} from ${id} to ${idx}, chunkId: ${i}")
-        worker ! ScatterBlock(chunk, id, idx, i, maxScattered + 1);
+      val idx = (i+id) % peerNum
+      peers.get(idx) match {
+        case Some(worker) =>
+          val dataBlock = getDataBlock(idx)
+          //Partition the dataBlock if it is too big
+          val peerNumChunks =  math.ceil(1f * dataBlock.length / maxChunkSize).toInt
+          for (i <- 0 until peerNumChunks) {
+            val chunkStart = math.min(i * maxChunkSize, dataBlock.length - 1);
+            val chunkEnd = math.min((i + 1) * maxChunkSize - 1, dataBlock.length - 1);
+            val chunk = new Array[Float](chunkEnd - chunkStart + 1);
+            System.arraycopy(dataBlock, chunkStart, chunk, 0, chunk.length);
+            log.debug(s"\n----send msg ${chunk.toList} from ${id} to ${idx}, chunkId: ${i}")
+            worker ! ScatterBlock(chunk, id, idx, i, maxScattered + 1);
+          }
+        case None => Unit
       }
     }
   }
 
   private def initDataBlockRanges() = {
-    val stepSize = math.ceil(dataSize * 1f / peers.size).toInt
+    val stepSize = math.ceil(dataSize * 1f / peerNum).toInt
     Array.range(0, dataSize, stepSize)
   }
 
@@ -218,7 +228,7 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
   }
 
   private def range(idx: Int): (Int, Int) = {
-    if (idx >= peers.size - 1)
+    if (idx >= peerNum - 1)
       (dataRange(idx), dataSize)
     else
       (dataRange(idx), dataRange(idx + 1))
@@ -227,10 +237,13 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
   private def broadcast(data: Array[Float], chunkId: Int, bcastRound: Int, reduceCount: Int) = {
     log.debug(s"\n----Start broadcasting")
     for( i <- 0 until peers.size){
-        val idx = (i+id) % peers.size
-        var worker = peers.get(idx).get
-        log.debug(s"\n----Broadcast data:${data.toList}, src: ${id}, dest: ${idx}, chunkId: ${chunkId}, round: ${bcastRound}")
-        worker ! ReduceBlock(data, id, idx, chunkId, bcastRound, reduceCount)
+        val idx = (i+id) % peerNum
+        peers.get(idx) match {
+          case Some(worker) =>
+            log.debug(s"\n----Broadcast data:${data.toList}, src: ${id}, dest: ${idx}, chunkId: ${chunkId}, round: ${bcastRound}")
+            worker ! ReduceBlock(data, id, idx, chunkId, bcastRound, reduceCount)
+          case None => Unit
+        }
     }
   }
 
