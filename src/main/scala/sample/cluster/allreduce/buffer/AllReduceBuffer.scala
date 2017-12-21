@@ -7,7 +7,7 @@ abstract class AllReduceBuffer(dataSize: Int,
 
   type Buffer = Array[Array[Float]]
   var temporalOffset = 0
-  val numChunks = math.ceil(1f * dataSize / maxChunkSize).toInt
+  val numChunks = getNumChunk(dataSize)
   var temporalBuffer: Array[Buffer] = {
     Array.fill(maxLag) {
       initializePeerBuffer()
@@ -41,4 +41,7 @@ abstract class AllReduceBuffer(dataSize: Int,
     countFilled(timeIdx(maxLag - 1)) = Array.fill(numChunks)(0);
   }
 
+  protected def getNumChunk(size: Int) = {
+    math.ceil(1f * size / maxChunkSize).toInt
+  }
 }

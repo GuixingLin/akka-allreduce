@@ -179,6 +179,27 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       expectMsg(CompleteAllreduce(0, 0))
     }
 
+    "uneven size sending to self first" in {
+
+      val dataSize = 3
+      val worker = createNewWorker(createBasicDataSource(dataSize), sink)
+      val workers: Map[Int, ActorRef] = initializeWorkersAsSelf(2)
+      val idx = 1
+      val thReduce = 1
+      val thComplete = 1
+      val maxLag = 1
+      val maxChunkSize = 1
+
+      worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
+      println("============start normal test!===========")
+      worker ! StartAllreduce(0)
+
+      // expect scattering to other nodes
+      expectScatter(ScatterBlock(Array(2f), srcId = 1, destId = 1, 0, 0))
+      expectScatter(ScatterBlock(Array(0f), srcId = 1, destId = 0, 0, 0))
+      expectScatter(ScatterBlock(Array(1f), srcId = 1, destId = 0, 1, 0))
+
+    }
 
     "single-round allreduce with nasty chunk size" in {
 
@@ -190,7 +211,6 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       val thComplete = 0.8f
       val maxLag = 5
       val maxChunkSize = 2
-      val numActors = 2
 
       worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       println("============start normal test!===========")
@@ -235,7 +255,6 @@ class AllReduceSpec extends TestKit(ActorSystem("MySpec")) with ImplicitSender
       val thComplete = 0.7f
       val maxLag = 5
       val maxChunkSize = 1
-      val numActors = 2
 
       worker ! InitWorkers(workers, self, idx, thReduce, thComplete, maxLag, dataSize, maxChunkSize)
       println("============start normal test!===========")

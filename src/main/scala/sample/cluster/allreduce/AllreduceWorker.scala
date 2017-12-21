@@ -25,6 +25,7 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
   var data: Array[Float] = Array.empty // store input data
   var dataRange: Array[Int] = Array.empty
   var maxBlockSize = 0
+  var minBlockSize = 0
   var myBlockSize = 0
   var scatterBlockBuf: ScatteredDataBuffer = ScatteredDataBuffer.empty // store scattered data received
   var reduceBlockBuf: ReducedDataBuffer = ReducedDataBuffer.empty // store reduced data received
@@ -49,6 +50,7 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
       dataRange = initDataBlockRanges()
       myBlockSize = blockSize(id)
       maxBlockSize = blockSize(0)
+      minBlockSize = blockSize(peers.size - 1)
 
       maxChunkSize = init.maxChunkSize
 
@@ -61,7 +63,9 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
       )
 
       reduceBlockBuf = ReducedDataBuffer(
-        dataSize = maxBlockSize,
+        maxBlockSize = maxBlockSize,
+        minBlockSize = minBlockSize,
+        totalDataSize = dataSize,
         peerSize = peers.size,
         maxLag = maxLag + 1,
         completionThreshold = thComplete,
@@ -75,7 +79,7 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
       log.info(s"\n----Number of peers = ${peers.size}")
       log.info(s"\n----Thresholds: thReduce = ${thReduce}, thComplete = ${thComplete}, maxLag = ${maxLag}")
       log.info(s"\n----Size of scatter buffer: ${scatterBlockBuf.maxLag} x ${scatterBlockBuf.peerSize} x ${scatterBlockBuf.dataSize}")
-      log.info(s"\n----Size of reduce buffer: ${reduceBlockBuf.maxLag} x ${reduceBlockBuf.peerSize} x ${reduceBlockBuf.dataSize}")
+      log.info(s"\n----Size of reduce buffer: ${reduceBlockBuf.maxLag} x ${reduceBlockBuf.peerSize} x ${reduceBlockBuf.maxBlockSize}")
 
     case s: StartAllreduce =>
       log.info(s"\n----Start allreduce round ${s.round}")
@@ -178,7 +182,7 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
   }
 
   private def flush(completedRound: Int, row: Int) = {
-    val (output, counts) = reduceBlockBuf.getWithCounts(row, totalSize = dataSize)
+    val (output, counts) = reduceBlockBuf.getWithCounts(row)
     log.info(s"\n----Flushing ${output.toList} with counts ${counts.toList} at completed round $completedRound")
     dataSink(AllReduceOutput(output, counts, completedRound))
   }
@@ -189,7 +193,8 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
       val worker = peers.get(idx).get
       val dataBlock = getDataBlock(idx)
       //Partition the dataBlock if it is too big
-      for (i <- 0 until scatterBlockBuf.numChunks) {
+      val peerNumChunks =  math.ceil(1f * dataBlock.length / maxChunkSize).toInt
+      for (i <- 0 until peerNumChunks) {
         val chunkStart = math.min(i * maxChunkSize, dataBlock.length - 1);
         val chunkEnd = math.min((i + 1) * maxChunkSize - 1, dataBlock.length - 1);
         val chunk = new Array[Float](chunkEnd - chunkStart + 1);

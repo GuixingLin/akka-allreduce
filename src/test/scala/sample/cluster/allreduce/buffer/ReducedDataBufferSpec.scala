@@ -7,9 +7,10 @@ import scala.util.Random
 class ReducedDataBufferSpec extends WordSpec with Matchers {
 
 
-  "Reduced buffer behavior" should {
+  "Reduced buffer behavior on evenly sized blocks" should {
 
-    val dataSize = 5
+    val maxBlockSize = 5
+    val minBlockSize = 5
     val peerSize = 3
     val maxLag = 4
     val threshold = 0.7f
@@ -18,19 +19,19 @@ class ReducedDataBufferSpec extends WordSpec with Matchers {
     val totalDataSize = 15
     val rowAtTest = 1
 
-    val buffer = ReducedDataBuffer(dataSize, peerSize, maxLag, threshold, maxChunkSize)
+    val buffer = ReducedDataBuffer(maxBlockSize, minBlockSize, totalDataSize, peerSize, maxLag, threshold, maxChunkSize)
 
     "initialize buffers" in {
 
       buffer.temporalBuffer.length shouldEqual maxLag
       buffer.temporalBuffer(0).length shouldEqual peerSize
-      buffer.temporalBuffer(0)(0).length shouldEqual dataSize
+      buffer.temporalBuffer(0)(0).length shouldEqual maxBlockSize
 
     }
 
     "have zero counts" in {
 
-      val (output, count) = buffer.getWithCounts(rowAtTest, totalDataSize)
+      val (output, count) = buffer.getWithCounts(rowAtTest)
       output.sum shouldEqual 0
       count.sum shouldEqual 0
 
@@ -41,7 +42,7 @@ class ReducedDataBufferSpec extends WordSpec with Matchers {
       val chunkId = 0
       val toStore: Array[Float] = randomFloatArray(maxChunkSize)
       buffer.store(toStore, rowAtTest, srcId, chunkId, count = peerSize)
-      val (output, count) = buffer.getWithCounts(rowAtTest, totalDataSize)
+      val (output, count) = buffer.getWithCounts(rowAtTest)
       output.toList.slice(0, maxChunkSize) shouldEqual toStore.toList
 
       for (i <- 0 until maxChunkSize) {
@@ -58,11 +59,11 @@ class ReducedDataBufferSpec extends WordSpec with Matchers {
         buffer.store(toStore, rowAtTest, srcId, chunkId, count = peerSize)
       }
 
-      val lastChunkSize = dataSize - (buffer.numChunks - 1) * maxChunkSize
+      val lastChunkSize = maxBlockSize - (buffer.numChunks - 1) * maxChunkSize
       val toStore: Array[Float] = randomFloatArray(lastChunkSize)
       buffer.store(toStore, rowAtTest, srcId, chunkId, count = peerSize)
 
-      val (output, _) = buffer.getWithCounts(rowAtTest, totalDataSize)
+      val (output, _) = buffer.getWithCounts(rowAtTest)
 
       output.toList.slice(totalDataSize - lastChunkSize, totalDataSize) shouldEqual toStore.toList
 
@@ -96,7 +97,7 @@ class ReducedDataBufferSpec extends WordSpec with Matchers {
       // peer 1 - missing 3rd chunk
       // peer 2 - missing 1st chunk
 
-      val (reduced, counts) = buffer.getWithCounts(rowAtTest, totalDataSize)
+      val (reduced, counts) = buffer.getWithCounts(rowAtTest)
       reduced.size shouldEqual counts.size
 
       val missingIndex = List(4, 9, 10, 11)
@@ -114,6 +115,45 @@ class ReducedDataBufferSpec extends WordSpec with Matchers {
       for (i <- presentIndex) {
         counts(i) shouldEqual peerSize
       }
+
+    }
+
+  }
+
+
+  "Reduced buffer behavior on uneven sized blocks" should {
+
+    val maxBlockSize = 6
+    val minBlockSize = 4
+    val peerSize = 3
+    val maxLag = 4
+    val threshold = 1
+    val maxChunkSize = 2
+
+    val totalDataSize = 16
+    val rowAtTest = 1
+
+    val buffer = ReducedDataBuffer(maxBlockSize, minBlockSize, totalDataSize, peerSize, maxLag, threshold, maxChunkSize)
+
+    "store until reach completion threshold " in {
+
+      buffer.reachCompletionThreshold(rowAtTest) shouldBe false
+
+      // 8 chunks
+
+      // peer 0/1
+      for (chunkId <- 0 until 3) {
+        for (peerId <- 0 until 2) {
+          buffer.store(randomFloatArray(maxChunkSize), row = rowAtTest, srcId = peerId, chunkId = chunkId, count = peerSize)
+          buffer.reachCompletionThreshold(rowAtTest) shouldBe false
+        }
+      }
+
+      buffer.store(randomFloatArray(maxChunkSize), row = rowAtTest, srcId = 2, chunkId = 0, count = peerSize)
+      buffer.reachCompletionThreshold(rowAtTest) shouldBe false
+
+      buffer.store(randomFloatArray(maxChunkSize), row = rowAtTest, srcId = 2, chunkId = 1, count = peerSize)
+      buffer.reachCompletionThreshold(rowAtTest) shouldBe true
 
     }
 
