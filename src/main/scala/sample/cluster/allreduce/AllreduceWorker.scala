@@ -1,7 +1,5 @@
 package sample.cluster.allreduce
 
-import java.util
-
 import akka.actor.{Actor, ActorRef, ActorSystem, Props, Terminated}
 import com.typesafe.config.ConfigFactory
 import sample.cluster.allreduce.buffer.{ReducedDataBuffer, ScatteredDataBuffer}
