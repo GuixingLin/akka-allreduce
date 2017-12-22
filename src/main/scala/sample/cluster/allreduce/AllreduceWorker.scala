@@ -1,5 +1,7 @@
 package sample.cluster.allreduce
 
+import java.util
+
 import akka.actor.{Actor, ActorRef, ActorSystem, Props, Terminated}
 import com.typesafe.config.ConfigFactory
 import sample.cluster.allreduce.buffer.{ReducedDataBuffer, ScatteredDataBuffer}
@@ -304,16 +306,18 @@ object AllreduceWorker {
 
   }
 
-  private def initWorker(port: String, sourceDataSize: Int, checkpoint: Int = 50) = {
+  private def initWorker(port: String, sourceDataSize: Int, checkpoint: Int = 50, assertMultiple: Int = 0) = {
     val config = ConfigFactory.parseString(s"\nakka.remote.netty.tcp.port=$port").
       withFallback(ConfigFactory.parseString("akka.cluster.roles = [worker]")).
       withFallback(ConfigFactory.load())
 
     val system = ActorSystem("ClusterSystem", config)
 
+    // Specify data source
     lazy val floats = Array.range(0, sourceDataSize).map(_.toFloat)
     val source: DataSource = _ => AllReduceInput(floats)
 
+    // Specify data sink
     var tic = System.currentTimeMillis()
     val sink: DataSink = r => {
       if (r.iteration % checkpoint == 0 && r.iteration != 0) {
@@ -321,6 +325,11 @@ object AllreduceWorker {
         println(s"----Data output at #${r.iteration} - $timeElapsed s")
         val bytes = r.data.length * 4.0 * checkpoint
         println("%2.1f Mbytes in %2.1f seconds at %4.3f MBytes/sec" format(bytes / 1.0e6, timeElapsed, bytes / 1.0e6 / timeElapsed));
+
+        if (assertMultiple > 0) {
+          assert(floats.map(_* assertMultiple).toList == r.data.toList, "Expected output should be multiple of input. Check if all thresholds are 1")
+          assert(r.count.toList == Array.fill(sourceDataSize)(assertMultiple), "Counts should equal expected multiples for all data element. Check if all thresholds are 1")
+        }
         tic = System.currentTimeMillis()
       }
     }
@@ -332,7 +341,15 @@ object AllreduceWorker {
     main(Array(port))
   }
 
-  def startUp(port: String, dataSize: Int, checkpoint: Int = 50) = {
+  /**
+    * Test start up method
+    * @param port port number
+    * @param dataSize number of elements in input array from each node to be reduced
+    * @param checkpoint interval at which timing is calculated
+    * @param assertMultiple expected multiple of input as reduced results
+    * @return
+    */
+  def startUp(port: String, dataSize: Int, checkpoint: Int = 50, assertMultiple: Int=0) = {
     initWorker(port, dataSize, checkpoint)
   }
 
