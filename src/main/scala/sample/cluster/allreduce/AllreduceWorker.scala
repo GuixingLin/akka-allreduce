@@ -211,14 +211,15 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
       val idx = (i+id) % peerNum
       peers.get(idx) match {
         case Some(worker) =>
-          val dataBlock = getDataBlock(idx)
           //Partition the dataBlock if it is too big
-          val peerNumChunks =  math.ceil(1f * dataBlock.length / maxChunkSize).toInt
+          val (blockStart, blockEnd) = range(idx)
+          val peerBlockSize = blockEnd - blockStart
+          val peerNumChunks =  math.ceil(1f * peerBlockSize / maxChunkSize).toInt
           for (i <- 0 until peerNumChunks) {
-            val chunkStart = math.min(i * maxChunkSize, dataBlock.length - 1);
-            val chunkEnd = math.min((i + 1) * maxChunkSize - 1, dataBlock.length - 1);
+            val chunkStart = math.min(i * maxChunkSize, peerBlockSize - 1);
+            val chunkEnd = math.min((i + 1) * maxChunkSize - 1, peerBlockSize - 1);
             val chunk = new Array[Float](chunkEnd - chunkStart + 1);
-            System.arraycopy(dataBlock, chunkStart, chunk, 0, chunk.length);
+            System.arraycopy(data, blockStart + chunkStart, chunk, 0, chunk.length);
             log.debug(s"\n----send msg ${chunk.toList} from ${id} to ${idx}, chunkId: ${i}")
             worker ! ScatterBlock(chunk, id, idx, i, maxScattered + 1);
           }
@@ -230,13 +231,6 @@ class AllreduceWorker(dataSource: AllReduceInputRequest => AllReduceInput,
   private def initDataBlockRanges() = {
     val stepSize = math.ceil(dataSize * 1f / peerNum).toInt
     Array.range(0, dataSize, stepSize)
-  }
-
-  private def getDataBlock(idx: Int): Array[Float] = {
-    val (start, end) = range(idx)
-    val block = new Array[Float](end - start)
-    System.arraycopy(data, start, block, 0, end - start)
-    block
   }
 
   private def range(idx: Int): (Int, Int) = {
