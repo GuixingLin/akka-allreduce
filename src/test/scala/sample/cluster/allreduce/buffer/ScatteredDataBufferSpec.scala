@@ -9,14 +9,14 @@ class ScatteredDataBufferSpec extends WordSpec with Matchers {
 
   "Scattered buffer behavior" should {
 
-    val dataSize = 5
+    val blockSize = 5
     val peerSize = 4
     val maxLag = 4
     val reducingThreshold = 0.75f
     val maxChunkSize = 3
     val rowAtTest = 1
 
-    val buffer = ScatteredDataBuffer(dataSize, peerSize, maxLag, reducingThreshold, maxChunkSize)
+    val buffer = ScatteredDataBuffer(blockSize, peerSize, maxLag, reducingThreshold, maxChunkSize)
     val numChunks = buffer.numChunks
     val expectedCriticalPeerSize = 3
 
@@ -25,7 +25,7 @@ class ScatteredDataBufferSpec extends WordSpec with Matchers {
 
       buffer.temporalBuffer.length shouldEqual maxLag
       buffer.temporalBuffer(0).length shouldEqual peerSize
-      buffer.temporalBuffer(0)(0).length shouldEqual dataSize
+      buffer.temporalBuffer(0)(0).length shouldEqual blockSize
 
     }
 
@@ -36,7 +36,7 @@ class ScatteredDataBufferSpec extends WordSpec with Matchers {
         val toStore: Array[Float] = randomFloatArray(maxChunkSize)
         buffer.store(toStore, rowAtTest, 0, lastChunkId)
       }
-      val excess = numChunks * maxChunkSize - dataSize
+      val excess = numChunks * maxChunkSize - blockSize
       val toStore = randomFloatArray(maxChunkSize - excess)
       buffer.store(toStore, rowAtTest, 0, lastChunkId)
     }
@@ -65,6 +65,44 @@ class ScatteredDataBufferSpec extends WordSpec with Matchers {
 
   }
 
+  "Scattered buffer summation reduction" should {
+
+    val blockSize = 2
+    val maxChunkSize = 3
+    val peerSize = 2
+    val maxLag = 2
+    val rowAtTest = 0
+    val chunkAtTest = 0
+    val reducingThreshold = 1f
+
+    val buffer = ScatteredDataBuffer(blockSize, peerSize, maxLag, reducingThreshold, maxChunkSize)
+
+    "sum from all peers at one row" in {
+
+      for (i <- 0 until peerSize) {
+        val arrayToStore = (0 until blockSize).map(_ => i.toFloat).toArray
+        buffer.store(data= arrayToStore, row=rowAtTest, srcId=i,chunkId=chunkAtTest)
+        val (_,count) = buffer.reduce(rowAtTest, chunkId = chunkAtTest)
+        count shouldEqual i + 1
+      }
+
+      val (reducedSum, _) = buffer.reduce(rowAtTest, chunkId = chunkAtTest)
+      val sequenceSum = (0 until peerSize).sum
+      reducedSum.toList shouldEqual (0 until blockSize).map(_ => sequenceSum)
+
+    }
+
+    "not be affected by other rows" in {
+
+      val (initArray, countZero) = buffer.reduce(rowAtTest + 1, chunkId = chunkAtTest)
+
+      countZero shouldEqual 0
+      initArray.toList shouldEqual (0 until blockSize).map(_ => 0)
+
+    }
+
+
+  }
   private def randomFloatArray(maxChunkSize: Int) = {
     Array.range(0, maxChunkSize).toList.map(_ => Random.nextFloat()).toArray
   }

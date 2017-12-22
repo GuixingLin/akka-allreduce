@@ -5,15 +5,15 @@ import sample.cluster.allreduce.WorkerConfig
 
 
 val threshold = ThresholdConfig(
-  thAllreduce = 0.50f,
-  thReduce = 0.50f,
-  thComplete = 0.50f
+  thAllreduce = 1f,
+  thReduce = 1f,
+  thComplete = 1f
 )
 
 val dataConfig = DataConfig(
-  dataSize = 500000,
-  maxChunkSize = 20000,
-  maxRound = 100
+  dataSize = 778,
+  maxChunkSize = 3,
+  maxRound = 1000
 )
 
 val workerConfig = WorkerConfig(
