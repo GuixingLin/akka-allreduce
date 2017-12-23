@@ -320,7 +320,7 @@ object AllreduceWorker {
 
         if (assertMultiple > 0) {
           assert(floats.map(_* assertMultiple).toList == r.data.toList, "Expected output should be multiple of input. Check if all thresholds are 1")
-          assert(r.count.toList == Array.fill(sourceDataSize)(assertMultiple), "Counts should equal expected multiples for all data element. Check if all thresholds are 1")
+          assert(r.count.toList == Array.fill(sourceDataSize)(assertMultiple).toList, s"Counts should equal expected multiples for all data element. Check if all thresholds are 1. ${r.count.toList}")
         }
         tic = System.currentTimeMillis()
       }
@@ -342,7 +342,7 @@ object AllreduceWorker {
     * @return
     */
   def startUp(port: String, dataSize: Int, checkpoint: Int = 50, assertMultiple: Int=0) = {
-    initWorker(port, dataSize, checkpoint)
+    initWorker(port, dataSize, checkpoint, assertMultiple)
   }
 
 }
